@@ -1,0 +1,98 @@
+---
+title: "Preprocessing"
+author: "FERRAN ARMENGOL"
+date: "2025-10-06"
+output: html_document
+---
+Preprocessing
+```{r}
+#install.packages("dplyr")
+library(dplyr)
+```
+
+```{r}
+train <- read.csv("train.csv", header = TRUE, sep = ",")
+test  <- read.csv("test.csv", header = TRUE, sep = ",")
+datos <- bind_rows(train, test)
+
+dim(datos)       
+head(datos)       
+summary(datos)   
+clases <- sapply(datos, class)
+datos$HasCrCard <- character(datos$HasCrCard)
+datos$IsActiveMember <- character(datos$IsActiveMember)
+datos$SavingsAccountFlag <- character(datos$SavingsAccountFlag)
+
+varNum <- names(clases)[which(clases %in% c("numeric", "integer"))]
+varCat <- names(clases)[which(clases %in% c("character", "factor"))]
+```
+
+```{r}
+#install.packages("dlookr")
+library(dlookr)
+dlookr::diagnose(datos)
+```
+```{r}
+head(overview(datos), n = 9)
+```
+
+```{r}
+diagnose_numeric(datos)
+```
+
+```{r}
+diagnose_category(datos)
+```
+```{r}
+mapply(function(x, name) {
+  cat("var. ", name, ": \n\t min: ", min(x), "\n\t max: ", max(x), "\n")
+  invisible(NULL)  # Evita la salida de valores NULL
+}, datos[, varNum], colnames(datos[, varNum]))
+```
+```{r}
+library(EnvStats)
+
+IQROutlier <- function(variable, rmnas = TRUE) {
+  IQ <- iqr(variable, na.rm = rmnas)
+  intInf <- quantile(variable, probs = c(0.25, 0.75))[[1]] - 1.5*IQ
+  intSup <- quantile(variable, probs = c(0.25, 0.75))[[2]] + 1.5*IQ
+  posicions <- which(variable >= intSup | variable <= intInf)
+  if (length(posicions) > 0) {
+    cat("Existeixen outliers en les posicions:", paste0(posicions, collapse = ", "))
+  } else {
+    cat("No existeixen outliers")
+  }
+  return(posicions)
+}
+outliers_todos <- lapply(varNum, function(v) {
+  cat("\n\nVariable:", v, "\n")
+  IQROutlier(datos[[v]])
+})
+```
+
+```{r}
+library(ggplot2)
+
+variable <- "Age"
+
+boxplot(datos[, variable])
+boxplot.stats(datos[, variable])$out
+# Crear un boxplot
+ggplot(datos, aes(y = get(variable))) +
+  geom_boxplot(fill = "skyblue", color = "black") +
+  labs(title = paste0("Boxplot de ", variable)) +
+  theme_minimal()
+```
+
+```{r}
+variable <- "Age"
+valorEscalado <- scale(datos[, variable])
+hist(valorEscalado)
+```
+```{r}
+ggplot(data.frame(valor = valorEscalado), aes(x = valor)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") +  # Histograma
+  geom_vline(xintercept = c(3, -3), linetype = "dashed", color = "red", size = 1) + # Líneas horizontales
+  theme_minimal()
+```
+
