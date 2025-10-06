@@ -1,0 +1,11 @@
+---
+title: "Untitled"
+author: "FERRAN ARMENGOL"
+date: "2025-10-06"
+output: html_document
+---
+Prova
+```{r}
+print("Hola GitHub desde R!")
+```
+
