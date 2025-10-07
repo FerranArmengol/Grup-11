@@ -1,0 +1,82 @@
+---
+title: "Preprocessing_multivariante_outliers"
+author: "Salomón"
+date: "2025-10-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+
+train <- read.csv("train.csv", header = TRUE, sep = ",")
+test  <- read.csv("test.csv", header = TRUE, sep = ",")
+datos <- bind_rows(train, test)
+
+varNum <- names(datos)[sapply(datos, is.numeric)]
+datos_num <- datos[, varNum]
+summary(datos_num)
+
+
+
+
+center <- colMeans(datos_num, na.rm = TRUE)
+cov_matrix <- cov(datos_num, use = "complete.obs")
+
+
+dist_mahal <- mahalanobis(datos_num, center, cov_matrix)
+
+umbral <- qchisq(0.999, df = ncol(datos_num))
+
+
+outliers_mahal <- which(dist_mahal > umbral)
+cat("Número de outliers multivariantes detectados:", length(outliers_mahal), "\n")
+
+
+summary(dist_mahal)
+
+
+
+library(ggplot2)
+
+ggplot(data.frame(dist_mahal), aes(x = 1:length(dist_mahal), y = dist_mahal)) +
+  geom_point(color = "grey40") +
+  geom_hline(yintercept = umbral, color = "red", linetype = "dashed") +
+  labs(title = "Distancia de Mahalanobis", x = "Observación", y = "Distancia") +
+  theme_minimal()
+
+
+
+
+library(FactoMineR)
+library(factoextra)
+library(ggplot2)
+
+# PCA
+pca <- PCA(datos_num, scale.unit = TRUE, graph = FALSE)
+
+# Crear dataframe con coordenadas
+coords <- as.data.frame(pca$ind$coord)
+coords$Outlier <- factor(ifelse(1:nrow(datos_num) %in% outliers_mahal, "Outlier", "Normal"))
+
+# Gráfico manual con ggplot2 (sin errores de color)
+ggplot(coords, aes(x = Dim.1, y = Dim.2, color = Outlier)) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("blue", "red")) +
+  labs(title = "PCA - Outliers multivariantes (rojo = outliers)",
+       x = "Componente principal 1",
+       y = "Componente principal 2") +
+  theme_minimal()
+
+
+
+
+datos$Outlier_Mahalanobis <- FALSE
+datos$Outlier_Mahalanobis[outliers_mahal] <- TRUE
+
+write.csv(datos, "datos_outliers_multivariantes.csv", row.names = FALSE)
+```
+
