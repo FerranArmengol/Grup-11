@@ -4,7 +4,7 @@ author: "FERRAN ARMENGOL Y SALOMÓN SABAL"
 date: "2025-10-06"
 output: html_document
 ---
-Preprocessing
+Preprocessing univariante
 ```{r}
 #install.packages("dplyr")
 library(dplyr)
@@ -54,6 +54,7 @@ mapply(function(x, name) {
 }, datos[, varNum], colnames(datos[, varNum]))
 
 ```
+
 ```{r}
 library(EnvStats)
 
@@ -102,6 +103,8 @@ ggplot(data.frame(valor = valorEscalado), aes(x = valor)) +
   geom_vline(xintercept = c(3, -3), linetype = "dashed", color = "red", size = 1) + # Líneas horizontales
   theme_minimal()
 ```
+
+Preprocessing multivariante
 
 ```{r}
 #library(dplyr)
