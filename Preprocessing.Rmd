@@ -2,7 +2,9 @@
 title: "Preprocessing"
 author: "FERRAN ARMENGOL Y SALOMÓN SABAL"
 date: "2025-10-06"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 Preprocessing univariante
 ```{r}
