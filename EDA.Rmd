@@ -22,6 +22,7 @@ library(dplyr)
 train <- read.csv("train.csv", header = TRUE, sep = ",")
 test  <- read.csv("test.csv", header = TRUE, sep = ",")
 datos <- bind_rows(train, test)
+write.csv(datos, "datos_origen.csv", row.names = FALSE)
 
 dim(datos)       
 head(datos)       
@@ -31,9 +32,9 @@ summary(datos)
 ## Tipos de variables
 ```{r}
 clases <- sapply(datos, class)
-datos$HasCrCard <- factor(datos$HasCrCard)
-datos$IsActiveMember <- factor(datos$IsActiveMember)
-datos$SavingsAccountFlag <- factor(datos$SavingsAccountFlag)
+datos$HasCrCard <- as.factor(datos$HasCrCard)
+datos$IsActiveMember <- as.factor(datos$IsActiveMember)
+datos$SavingsAccountFlag <- as.factor(datos$SavingsAccountFlag)
 
 varNum <- names(clases)[which(clases %in% c("numeric", "integer"))]
 varCat <- names(clases)[which(clases %in% c("character", "factor"))]
@@ -180,20 +181,16 @@ for (varc1 in varCat) {
 library(skimr)
 library(tidyverse)
 
-## Podem visualitzar un descriptiu de les dades 
 skim(datos)
 ```
 ```{r}
 library(visdat)
 
-## Busquem per a variables numériques o categóriques si hi ha NA's
 vis_dat(datos)
-## Visualitzem percentatges de NA's en les variables
 vis_miss(datos)
 ```
 
 ```{r}
-## Generem la matriu de correlacions
 datos %>% select(where(is.numeric)) %>% 
   vis_cor()
 ```
@@ -201,16 +198,13 @@ datos %>% select(where(is.numeric)) %>%
 ```{r}
 library(inspectdf)
 
-## Tipus de dades
 inspect_types(datos) %>% show_plot()
 ```
 ```{r}
-## Comprovem la distribució de les variables 
 inspect_num(datos) %>% show_plot()
 ```
 
 ```{r}
-## similiar to inspect_imb, but for all levels
 inspect_cat(datos) %>% show_plot()
 ```
 
