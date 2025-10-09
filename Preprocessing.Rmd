@@ -13,9 +13,8 @@ library(dplyr)
 ```
 
 ```{r}
-train <- read.csv("train.csv", header = TRUE, sep = ",")
-test  <- read.csv("test.csv", header = TRUE, sep = ",")
-datos <- bind_rows(train, test)
+datos <- read.csv("datos_origen.csv", header = TRUE, sep = ",")
+
 
 dim(datos)       
 head(datos)       
@@ -24,6 +23,7 @@ clases <- sapply(datos, class)
 datos$HasCrCard <- as.factor(datos$HasCrCard)
 datos$IsActiveMember <- as.factor(datos$IsActiveMember)
 datos$SavingsAccountFlag <- as.factor(datos$SavingsAccountFlag)
+
 
 
 varNum <- names(datos)[sapply(datos, is.numeric)]
@@ -92,28 +92,40 @@ ggplot(datos, aes(y = get(variable))) +
   geom_boxplot(fill = "skyblue", color = "black") +
   labs(title = paste0("Boxplot de ", variable)) +
   theme_minimal()
+
+
+variable <- "ComplaintsCount"
+
+boxplot(datos[, variable])
+boxplot.stats(datos[, variable])$out
+# Crear un boxplot
+ggplot(datos, aes(y = get(variable))) +
+  geom_boxplot(fill = "skyblue", color = "black") +
+  labs(title = paste0("Boxplot de ", variable)) +
+  theme_minimal()
 ```
 
 ```{r}
 variable <- "Age"
 valorEscalado <- scale(datos[, variable])
-hist(valorEscalado)
-```
-```{r}
 ggplot(data.frame(valor = valorEscalado), aes(x = valor)) +
   geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") +  # Histograma
   geom_vline(xintercept = c(3, -3), linetype = "dashed", color = "red", size = 1) + # Líneas horizontales
   theme_minimal()
 ```
 
-Preprocessing multivariante
-
 ```{r}
-#library(dplyr)
+library(EnvStats)
 
-train <- read.csv("train.csv", header = TRUE, sep = ",")
-test  <- read.csv("test.csv", header = TRUE, sep = ",")
-datos <- bind_rows(train, test)
+variable <- "Age"
+test <- EnvStats::rosnerTest(datos[, variable], k = 251)
+test
+```
+
+# Outliers multivariante
+
+## Mahalanobis
+```{r}
 
 varNum <- names(datos)[sapply(datos, is.numeric)]
 datos_num <- datos[, varNum]
@@ -127,16 +139,17 @@ cov_matrix <- cov(datos_num, use = "complete.obs")
 
 
 dist_mahal <- mahalanobis(datos_num, center, cov_matrix)
+# plot(density(dist_mahal)) # Después de missings
 
 umbral <- qchisq(0.999, df = ncol(datos_num))
 
 
 outliers_mahal <- which(dist_mahal > umbral)
 cat("Número de outliers multivariantes detectados:", length(outliers_mahal), "\n")
-
-
 summary(dist_mahal)
 
+par(mfrow=c(1,1))
+hist(dist_mahal)
 
 
 #library(ggplot2)
@@ -147,8 +160,25 @@ ggplot(data.frame(dist_mahal), aes(x = 1:length(dist_mahal), y = dist_mahal)) +
   labs(title = "Distancia de Mahalanobis", x = "Observación", y = "Distancia") +
   theme_minimal()
 
+```
+## Mahalanobis Robusto
 
+```{r}
 
+```
+## KNN
+```{r}
+
+```
+
+## LOF
+```{r}
+
+```
+
+## PCA
+
+```{r}
 
 library(FactoMineR)
 library(factoextra)
@@ -176,5 +206,7 @@ ggplot(coords, aes(x = Dim.1, y = Dim.2, color = Outlier)) +
 datos$Outlier_Mahalanobis <- FALSE
 datos$Outlier_Mahalanobis[outliers_mahal] <- TRUE
 
-write.csv(datos, "datos_outliers_multivariantes.csv", row.names = FALSE)
 ```
+
+
+
