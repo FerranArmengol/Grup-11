@@ -332,8 +332,28 @@ ggplot(eval_results, aes(x = factor(Imputation), y = TotalScore, fill = TotalSco
 # 💾 (Opcional) Guardar dataset final
 # ======================================================
 
-write.csv(df_imputed, "datos_missing.csv", row.names = FALSE)
+# Asegurarte de que la columna ID es numérica
+datos_missing$ID <- as.numeric(datos_missing$ID)
 
+# Identificar cuántos NA hay
+num_na <- sum(is.na(datos_missing$ID))
+
+# Generar los IDs posibles para imputar (3001 a 10000)
+ids_posibles <- 3001:10000
+
+# Eliminar los IDs que ya existen (para no repetir)
+ids_disponibles <- setdiff(ids_posibles, datos_missing$ID)
+
+# Comprobar que hay suficientes IDs disponibles
+if (num_na > length(ids_disponibles)) {
+  stop("No hay suficientes IDs disponibles entre 3001 y 10000 para imputar todos los NA.")
+}
+
+# Asignar los nuevos IDs aleatoriamente a los NA
+set.seed(123)  # opcional, para reproducibilidad
+datos_missing$ID[is.na(datos_missing$ID)] <- sample(ids_disponibles, num_na, replace = FALSE)
+
+write.csv(df_imputed, "datos_missing.csv", row.names = FALSE)
 ```
 
 #KNN
