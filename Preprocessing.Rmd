@@ -131,9 +131,6 @@ varNum <- names(datos)[sapply(datos, is.numeric)]
 datos_num <- datos[, varNum]
 summary(datos_num)
 
-
-
-
 center <- colMeans(datos_num, na.rm = TRUE)
 cov_matrix <- cov(datos_num, use = "complete.obs")
 
@@ -164,16 +161,37 @@ ggplot(data.frame(dist_mahal), aes(x = 1:length(dist_mahal), y = dist_mahal)) +
 ## Mahalanobis Robusto
 
 ```{r}
-
+library(rrcov)
+cov_rob <- CovMcd(datos_num)
+dist_mahal_rob <- mahalanobis(datos_num, center = cov_rob@center, cov = cov_rob@cov)
+umbral_rob <- qchisq(0.999, df = ncol(datos_num))
+outliers_mahal_rob <- which(dist_mahal_rob > umbral_rob)
+cat("Número de outliers multivariantes (Mahalanobis robusto):", length(outliers_mahal_rob), "\n")
+datos$Outlier_Mahalanobis_Rob <- FALSE
+datos$Outlier_Mahalanobis_Rob[outliers_mahal_rob] <- TRUE
 ```
 ## KNN
 ```{r}
-
+library(DMwR)
+k <- 5
+dist_knn <- knn.dist(datos_num, k = k)
+knn_score <- apply(dist_knn, 1, mean)
+umbral_knn <- quantile(knn_score, 0.99)
+outliers_knn <- which(knn_score > umbral_knn)
+cat("Número de outliers multivariantes (KNN):", length(outliers_knn), "\n")
+datos$Outlier_KNN <- FALSE
+datos$Outlier_KNN[outliers_knn] <- TRUE
 ```
 
 ## LOF
 ```{r}
-
+library(DMwR)
+lof_score <- lofactor(datos_num, k = k)
+umbral_lof <- quantile(lof_score, 0.99)
+outliers_lof <- which(lof_score > umbral_lof)
+cat("Número de outliers multivariantes (LOF):", length(outliers_lof), "\n")
+datos$Outlier_LOF <- FALSE
+datos$Outlier_LOF[outliers_lof] <- TRUE
 ```
 
 ## PCA
@@ -205,8 +223,8 @@ ggplot(coords, aes(x = Dim.1, y = Dim.2, color = Outlier)) +
 
 datos$Outlier_Mahalanobis <- FALSE
 datos$Outlier_Mahalanobis[outliers_mahal] <- TRUE
-
 ```
+
 
 
 

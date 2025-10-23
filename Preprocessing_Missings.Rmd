@@ -171,24 +171,9 @@ ggplot(df_long, aes(x = Valor, fill = Tipo)) +
 
 # Imputación para todas las variables
 
-#KNN
-
-```{r}
-# Instalar si no lo tienes
-#install.packages("VIM")
-library(VIM)
-
-
-knn_imputed <- kNN(datos_MICE, k = 5)
-knn_imputed <- knn_imputed[, !grepl("_imp$", names(knn_imputed))]
-summary(knn_imputed)
-
-```
-
 # MICE
 ```{r}
 datos_MICE<-datos
-datos_MICE$ID <- NULL
 datos_MICE$Surname <- NULL
 datos_MICE$HasCrCard <- as.factor(datos_MICE$HasCrCard)
 datos_MICE$IsActiveMember <- as.factor(datos_MICE$IsActiveMember)
@@ -226,7 +211,7 @@ library(ggplot2)
 # datos_MICE <- df  # si tu dataset original se llama df
 
 # 3️⃣ Separar variables
-num_vars <- datos_MICE[, sapply(datos_MICE, is.numeric)]
+num_vars <- datos_MICE[, sapply(datos_MICE, is.numeric) & names(datos_MICE) != "ID"]
 cat_vars <- datos_MICE[, sapply(datos_MICE, is.factor)]
 
 # ======================================================
@@ -321,7 +306,7 @@ cat("👉 La mejor imputación combinada (numérica + categórica) es la número
 
 num_imputed_best <- num_list[[best_imp]]
 cat_imputed_best <- cat_list[[best_imp]]
-df_imputed <- cbind(num_imputed_best, cat_imputed_best)
+df_imputed <- cbind(ID = datos_MICE$ID, num_imputed_best, cat_imputed_best)
 
 # Verificar que no haya NA
 colSums(is.na(df_imputed))
@@ -351,19 +336,33 @@ write.csv(df_imputed, "datos_missing.csv", row.names = FALSE)
 
 ```
 
+#KNN
+
+```{r}
+# Instalar si no lo tienes
+#install.packages("VIM")
+#library(VIM)
+
+
+#knn_imputed <- kNN(datos_MICE, k = 5)
+#knn_imputed <- knn_imputed[, !grepl("_imp$", names(knn_imputed))]
+#summary(knn_imputed)
+
+```
+
 ## Comparación gráfica: vemos que el MICE es mejor
 ```{r}
-newBD <- data.frame(real = datos[, "Balance"], imputed = knn_imputed[, "Balance"])
-df_long <- newBD %>%
-  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+#newBD <- data.frame(real = datos[, "Balance"], imputed = knn_imputed[, "Balance"])
+#df_long <- newBD %>%
+  #pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
 
-ggplot(df_long, aes(x = Valor, fill = Variable)) +
-  geom_density(alpha = 0.3) +  # Transparencia para mejor visualización
-  labs(title = "Densidad de las tres variables",
-       x = "Valor",
-       y = "Densidad") +
-  theme_minimal() +
-  scale_fill_manual(values = c("blue", "red"))
+#ggplot(df_long, aes(x = Valor, fill = Variable)) +
+ # geom_density(alpha = 0.3) +  # Transparencia para mejor visualización
+ # labs(title = "Densidad de las tres variables",
+  #     x = "Valor",
+  #     y = "Densidad") +
+ # theme_minimal() +
+ # scale_fill_manual(values = c("blue", "red"))
 ```
 
 
@@ -379,4 +378,59 @@ ggplot(df_long, aes(x = Valor, fill = Variable)) +
        y = "Densidad") +
   theme_minimal() +
   scale_fill_manual(values = c("blue", "red"))
+```
+
+## Selección de variables
+```{r}
+## 1️⃣ Eliminación de variables con baja varianza (Filter)
+library(caret)
+datos_missing <-read.csv("datos_missing.csv", header = TRUE, sep = ",")
+nzv <- nearZeroVar(datos_missing, saveMetrics = TRUE)
+nzv
+
+# Eliminar variables con varianza cercana a cero
+datos_fs <- datos_missing[, !nzv$nzv]
+cat("Variables eliminadas por baja varianza:\n")
+print(rownames(nzv[nzv$nzv == TRUE, ]))
+
+## Análisis de correlación entre variables (Filter)
+library(corrplot)
+
+# Usamos solo variables numéricas
+num_vars <- datos_fs[, sapply(datos_fs, is.numeric)]
+cor_matrix <- cor(num_vars, use = "complete.obs")
+
+# Visualizar matriz de correlación
+corrplot(cor_matrix, method = "color", tl.cex = 0.6)
+
+# Eliminar variables con correlación > 0.90
+high_cor <- findCorrelation(cor_matrix, cutoff = 0.90)
+cat("Variables eliminadas por alta correlación:\n")
+print(colnames(num_vars)[high_cor])
+
+num_vars_reduced <- num_vars[, -high_cor]
+
+## Selección basada en importancia del modelo (Wrapper / Embedding)
+library(randomForest)
+
+# Convertimos Exited a factor si es necesario
+datos_fs$Exited <- as.factor(datos_fs$Exited)
+
+# Entrenar modelo para obtener importancia
+set.seed(123)
+rf_model <- randomForest(Exited ~ ., data = datos_fs, importance = TRUE, ntree = 200)
+
+# Importancia de variables
+varImpPlot(rf_model)
+
+# Extraer variables más importantes
+importance_values <- importance(rf_model)
+important_vars <- rownames(importance_values)[order(importance_values[, 1], decreasing = TRUE)]
+
+cat("Variables importantes según Random Forest:\n")
+print(important_vars)
+
+## Dataset final con las principales variables
+top_vars <- important_vars[1:10]   # Seleccionamos top 10 variables
+datos_final <- datos_fs[, top_vars]
 ```
