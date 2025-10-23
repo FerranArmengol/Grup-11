@@ -20,6 +20,7 @@ library(dplyr)
 
 ```{r}
 train <- read.csv("train.csv", header = TRUE, sep = ",")
+train$ID<-NA
 test  <- read.csv("test.csv", header = TRUE, sep = ",")
 datos <- bind_rows(train, test)
 write.csv(datos, "datos_origen.csv", row.names = FALSE)
@@ -36,10 +37,10 @@ datos$HasCrCard <- as.factor(datos$HasCrCard)
 datos$IsActiveMember <- as.factor(datos$IsActiveMember)
 datos$SavingsAccountFlag <- as.factor(datos$SavingsAccountFlag)
 
+clases <- sapply(datos, class)
 varNum <- names(clases)[which(clases %in% c("numeric", "integer"))]
 varCat <- names(clases)[which(clases %in% c("character", "factor"))]
 ```
-## Análisis exploratorio Univariante
 
 ### Numéricas
 
@@ -109,17 +110,18 @@ grid.arrange(grobs = plots, ncol = 2)
 cor(datos[, varNum])
 ```
 ```{r}
+#install.packages("PerformanceAnalytics")
 library(PerformanceAnalytics)
 chart.Correlation(as.matrix(datos[, varNum]),histogram = TRUE,pch=12)
 ```
 
 ### Num vs Cat
 ```{r}
-for (varN in varNum) {
-  for (varC in varCat) {
-   print(psych::describeBy(datos[, varN], group = datos[, varC])) 
-  }
-}
+#for (varN in varNum) {
+  #for (varC in varCat) {
+  # print(psych::describeBy(datos[, varN], group = datos[, varC])) 
+ # }
+#}
 ```
 
 ```{r}
