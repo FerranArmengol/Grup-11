@@ -175,6 +175,7 @@ ggplot(df_long, aes(x = Valor, fill = Tipo)) +
 ```{r}
 datos_MICE<-datos
 datos_MICE$Surname <- NULL
+datos_MICE$X<-NULL
 datos_MICE$HasCrCard <- as.factor(datos_MICE$HasCrCard)
 datos_MICE$IsActiveMember <- as.factor(datos_MICE$IsActiveMember)
 datos_MICE$SavingsAccountFlag <- as.factor(datos_MICE$SavingsAccountFlag)
@@ -184,6 +185,7 @@ datos_MICE$CustomerSegment  <- as.factor(datos_MICE$CustomerSegment)
 datos_MICE$MaritalStatus  <- as.factor(datos_MICE$MaritalStatus)
 datos_MICE$LoanStatus  <- as.factor(datos_MICE$LoanStatus)
 datos_MICE$Geography   <- as.factor(datos_MICE$Geography)
+
 ```
 
 ```{r}
@@ -193,38 +195,30 @@ set.seed(123)
 
 ```
 
-
+# IMPUTACIÓN MICE SEPARADA (NUMÉRICAS / CATEGÓRICAS)
 ```{r}
-# ======================================================
-# 🧠 IMPUTACIÓN MICE SEPARADA (NUMÉRICAS / CATEGÓRICAS)
-# + EVALUACIÓN DE LAS 5 IMPUTACIONES + VISUALIZACIÓN
-# ======================================================
 
-# 1️⃣ Cargar librerías
+# Cargar librerías
 library(naniar)
 library(mice)
 library(dplyr)
 library(ggplot2)
 
-# 2️⃣ Preparar el dataset
+# Preparar el dataset
 # Asegúrate de tener tu dataset cargado como 'datos_MICE'
 # datos_MICE <- df  # si tu dataset original se llama df
 
-# 3️⃣ Separar variables
-num_vars <- datos_MICE[, sapply(datos_MICE, is.numeric) & names(datos_MICE) != "ID"]
+#  Separar variables
+num_vars <- datos_MICE[, sapply(datos_MICE, is.numeric) & names(datos_MICE) != "ID" & names(datos_MICE) != "Exited"]
 cat_vars <- datos_MICE[, sapply(datos_MICE, is.factor)]
 
-# ======================================================
-# 🧩 IMPUTACIÓN DE VARIABLES NUMÉRICAS
-# ======================================================
+# IMPUTACIÓN DE VARIABLES NUMÉRICAS
 
 set.seed(123)
 mice_num <- mice(num_vars, m = 5, method = "pmm", maxit = 5, printFlag = FALSE)
 num_list <- lapply(1:5, function(i) complete(mice_num, i))
 
-# ======================================================
-# 🧩 IMPUTACIÓN DE VARIABLES CATEGÓRICAS
-# ======================================================
+# IMPUTACIÓN DE VARIABLES CATEGÓRICAS
 
 meth_cat <- make.method(cat_vars)
 meth_cat[] <- "polyreg"
@@ -233,9 +227,7 @@ set.seed(123)
 mice_cat <- mice(cat_vars, m = 5, method = meth_cat, maxit = 5, printFlag = FALSE)
 cat_list <- lapply(1:5, function(i) complete(mice_cat, i))
 
-# ======================================================
-# 🧮 EVALUACIÓN DE IMPUTACIONES
-# ======================================================
+# EVALUACIÓN DE IMPUTACIONES
 
 # --- Evaluación de numéricas ---
 eval_num <- data.frame(Imputation = 1:5, MeanDiff = NA, SdDiff = NA)
@@ -298,22 +290,19 @@ eval_results <- eval_results %>%
 print(eval_results)
 
 best_imp <- eval_results$Imputation[1]
-cat("👉 La mejor imputación combinada (numérica + categórica) es la número:", best_imp, "\n")
+best_imp
 
-# ======================================================
-# ✅ CREAR EL DATASET FINAL CON ESA IMPUTACIÓN
-# ======================================================
+# CREAR EL DATASET FINAL CON ESA IMPUTACIÓN
 
 num_imputed_best <- num_list[[best_imp]]
 cat_imputed_best <- cat_list[[best_imp]]
 df_imputed <- cbind(ID = datos_MICE$ID, num_imputed_best, cat_imputed_best)
 
 # Verificar que no haya NA
+
 colSums(is.na(df_imputed))
 
-# ======================================================
-# 📊 VISUALIZACIÓN DE RESULTADOS
-# ======================================================
+# VISUALIZACIÓN DE RESULTADOS
 library(ggplot2)
 ggplot(eval_results, aes(x = factor(Imputation), y = TotalScore, fill = TotalScore)) +
   geom_col(width = 0.6) +
@@ -328,9 +317,7 @@ ggplot(eval_results, aes(x = factor(Imputation), y = TotalScore, fill = TotalSco
   ) +
   theme_minimal(base_size = 14)
 
-# ======================================================
-# 💾 (Opcional) Guardar dataset final
-# ======================================================
+# Guardar dataset final
 
 # Asegurarte de que la columna ID es numérica
 df_imputed$ID <- as.numeric(df_imputed$ID)
@@ -350,9 +337,9 @@ if (num_na > length(ids_disponibles)) {
 }
 
 # Asignar los nuevos IDs aleatoriamente a los NA
-set.seed(123)  # opcional, para reproducibilidad
+set.seed(123)  
 df_imputed$ID[is.na(df_imputed$ID)] <- sample(ids_disponibles, num_na, replace = FALSE)
-
+df_imputed<-cbind(df_imputed,Exited=datos_MICE$Exited)
 write.csv(df_imputed, "datos_missing.csv", row.names = FALSE)
 ```
 
@@ -402,55 +389,155 @@ ggplot(df_long, aes(x = Valor, fill = Variable)) +
 
 ## Selección de variables
 ```{r}
-## 1️⃣ Eliminación de variables con baja varianza (Filter)
+
 library(caret)
-datos_missing <-read.csv("datos_missing.csv", header = TRUE, sep = ",")
-nzv <- nearZeroVar(datos_missing, saveMetrics = TRUE)
-nzv
-
-# Eliminar variables con varianza cercana a cero
-datos_fs <- datos_missing[, !nzv$nzv]
-cat("Variables eliminadas por baja varianza:\n")
-print(rownames(nzv[nzv$nzv == TRUE, ]))
-
-## Análisis de correlación entre variables (Filter)
 library(corrplot)
-
-# Usamos solo variables numéricas
-num_vars <- datos_fs[, sapply(datos_fs, is.numeric)]
-cor_matrix <- cor(num_vars, use = "complete.obs")
-
-# Visualizar matriz de correlación
-corrplot(cor_matrix, method = "color", tl.cex = 0.6)
-
-# Eliminar variables con correlación > 0.90
-high_cor <- findCorrelation(cor_matrix, cutoff = 0.90)
-cat("Variables eliminadas por alta correlación:\n")
-print(colnames(num_vars)[high_cor])
-
-num_vars_reduced <- num_vars[, -high_cor]
-
-## Selección basada en importancia del modelo (Wrapper / Embedding)
 library(randomForest)
+library(dplyr)
+library(tidyr)
 
-# Convertimos Exited a factor si es necesario
-datos_fs$Exited <- as.factor(datos_fs$Exited)
-
-# Entrenar modelo para obtener importancia
-set.seed(123)
-rf_model <- randomForest(Exited ~ ., data = datos_fs, importance = TRUE, ntree = 200)
-
-# Importancia de variables
-varImpPlot(rf_model)
-
-# Extraer variables más importantes
-importance_values <- importance(rf_model)
-important_vars <- rownames(importance_values)[order(importance_values[, 1], decreasing = TRUE)]
-
-cat("Variables importantes según Random Forest:\n")
-print(important_vars)
-
-## Dataset final con las principales variables
-top_vars <- important_vars[1:10]   # Seleccionamos top 10 variables
-datos_final <- datos_fs[, top_vars]
+# Leer los datos
+datos_missing <- read.csv("datos_missing.csv", header = TRUE, sep = ",")
 ```
+```{r}
+numeric_cols <- sapply(datos_missing, is.numeric)
+datos_num <- datos_missing[, numeric_cols]
+
+# Guardar variable objetivo y eliminarla de los numéricos
+if ("Exited" %in% names(datos_num)) {
+  target <- datos_num$Exited
+  datos_num <- datos_num[, names(datos_num) != "Exited", drop = FALSE]
+} else {
+  target <- datos_missing$Exited
+}
+
+# Varianza nula
+nzv <- nearZeroVar(datos_num, saveMetrics = TRUE)
+datos_nv <- datos_num[, !nzv$nzv]
+cat("Variables eliminadas por baja varianza:", sum(nzv$nzv), "\n")
+```
+```{r}
+# Correlación
+cor_matrix <- cor(datos_nv, use = "complete.obs")
+high_cor <- findCorrelation(cor_matrix, cutoff = 0.9)
+if (length(high_cor) > 0) {
+  cat(" Eliminadas por alta correlación:", length(high_cor), "\n")
+  datos_corr <- datos_nv[, -high_cor, drop = FALSE]
+} else {
+  datos_corr <- datos_nv
+  cat(" No hay correlaciones altas.\n")
+}
+
+library("corrplot")
+
+matriz_corr <- cor(datos_nv[, 1:15])
+corrplot(matriz_corr, method = "circle")
+```
+
+```{r}
+# Combinaciones lineales
+datos_corr_na <- drop_na(datos_corr)
+combos <- findLinearCombos(datos_corr_na)
+if (!is.null(combos$remove)) {
+  datos_lineales <- datos_corr_na[, -combos$remove, drop = FALSE]
+  cat(" Eliminadas por combinaciones lineales:", length(combos$remove), "\n")
+} else {
+  datos_lineales <- datos_corr_na
+  cat(" No se encontraron combinaciones lineales.\n")
+}
+```
+
+```{r}
+# Reconstruir dataset con categóricas y objetivo
+
+cat_vars <- datos_missing[, sapply(datos_missing, is.character)]
+datos_preseleccion <- cbind(datos_lineales, cat_vars, Exited = target)
+
+```
+# 2. COMPROBACIONES ANTES DEL RANDOM FOREST
+
+```{r}
+# Comprobar si Exited existe y tiene más de un nivel
+if (!"Exited" %in% names(datos_preseleccion)) stop("'Exited' no se encuentra en el dataset.")
+if (any(is.na(datos_preseleccion$Exited))) stop("'Exited' contiene valores NA.")
+if (length(unique(datos_preseleccion$Exited)) < 2) stop("'Exited' tiene un solo valor único. No se puede entrenar el modelo.")
+
+# Convertir Exited a factor
+if (!is.factor(datos_preseleccion$Exited)) {
+  datos_preseleccion$Exited <- as.factor(datos_preseleccion$Exited)
+  cat("️ 'Exited' convertido a factor.\n")
+}
+```
+
+```{r}
+#  Eliminar columnas con NAs o valores no válidos
+na_cols <- colnames(datos_preseleccion)[colSums(is.na(datos_preseleccion)) > 0]
+if (length(na_cols) > 0) {
+  cat(" Columnas con NA detectadas. Se eliminarán:\n")
+  print(na_cols)
+  datos_preseleccion <- datos_preseleccion %>% drop_na()
+}
+
+# Eliminar columnas constantes o de tipo carácter
+const_cols <- names(datos_preseleccion)[sapply(datos_preseleccion, function(x) length(unique(x)) <= 1)]
+if (length(const_cols) > 0) {
+  cat("️ Columnas constantes detectadas. Se eliminarán:\n")
+  print(const_cols)
+  datos_preseleccion <- datos_preseleccion[, !(names(datos_preseleccion) %in% const_cols)]
+}
+
+char_cols <- names(datos_preseleccion)[sapply(datos_preseleccion, is.character)]
+if (length(char_cols) > 0) {
+  cat("️ Columnas de texto detectadas. Se eliminarán:\n")
+  print(char_cols)
+  datos_preseleccion <- datos_preseleccion[, !(names(datos_preseleccion) %in% char_cols)]
+}
+
+cat("\nDataset limpio. Filas:", nrow(datos_preseleccion), "Columnas:", ncol(datos_preseleccion), "\n")
+```
+
+```{r}
+# ------------------------------------------------------
+# 3. RANDOM FOREST EMBEDDED
+# ------------------------------------------------------
+
+set.seed(123)
+rf_modelo <- randomForest(
+  Exited ~ .,
+  data = na.omit(datos_preseleccion),
+  importance = TRUE,
+  ntree = 500
+)
+varImp(rf_modelo)
+cat("\n Modelo Random Forest entrenado correctamente.\n")
+```
+
+```{r}
+varImpPlot(rf_modelo, main = "Importancia de variables (Embedded Method)")
+```
+
+```{r}
+importancia <- importance(rf_modelo)
+importancia_ordenada <- importancia[order(importancia[, 1], decreasing = TRUE), , drop = FALSE]
+cat("\n Ranking de variables más importantes:\n")
+```
+
+```{r}
+print(head(importancia_ordenada, 15))
+```
+
+```{r}
+vars_top <- rownames(importancia_ordenada)[1:10]
+cat("\nVariables seleccionadas para el dataset final:\n")
+```
+
+```{r}
+print(vars_top)
+```
+
+```{r}
+datos_final <- datos_preseleccion[, c(vars_top, "Exited")]
+write.csv(datos_final, "datos_final.csv", row.names = FALSE)
+cat("\n 'datos_final.csv' guardado correctamente.\n")
+```
+
