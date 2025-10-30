@@ -399,6 +399,7 @@ library(tidyr)
 # Leer los datos
 datos_missing <- read.csv("datos_missing.csv", header = TRUE, sep = ",")
 ```
+#Selección de las variables
 ```{r}
 numeric_cols <- sapply(datos_missing, is.numeric)
 datos_num <- datos_missing[, numeric_cols]
@@ -447,97 +448,5 @@ if (!is.null(combos$remove)) {
 }
 ```
 
-```{r}
-# Reconstruir dataset con categóricas y objetivo
 
-cat_vars <- datos_missing[, sapply(datos_missing, is.character)]
-datos_preseleccion <- cbind(datos_lineales, cat_vars, Exited = target)
-
-```
-# 2. COMPROBACIONES ANTES DEL RANDOM FOREST
-
-```{r}
-# Comprobar si Exited existe y tiene más de un nivel
-if (!"Exited" %in% names(datos_preseleccion)) stop("'Exited' no se encuentra en el dataset.")
-if (any(is.na(datos_preseleccion$Exited))) stop("'Exited' contiene valores NA.")
-if (length(unique(datos_preseleccion$Exited)) < 2) stop("'Exited' tiene un solo valor único. No se puede entrenar el modelo.")
-
-# Convertir Exited a factor
-if (!is.factor(datos_preseleccion$Exited)) {
-  datos_preseleccion$Exited <- as.factor(datos_preseleccion$Exited)
-  cat("️ 'Exited' convertido a factor.\n")
-}
-```
-
-```{r}
-#  Eliminar columnas con NAs o valores no válidos
-na_cols <- colnames(datos_preseleccion)[colSums(is.na(datos_preseleccion)) > 0]
-if (length(na_cols) > 0) {
-  cat(" Columnas con NA detectadas. Se eliminarán:\n")
-  print(na_cols)
-  datos_preseleccion <- datos_preseleccion %>% drop_na()
-}
-
-# Eliminar columnas constantes o de tipo carácter
-const_cols <- names(datos_preseleccion)[sapply(datos_preseleccion, function(x) length(unique(x)) <= 1)]
-if (length(const_cols) > 0) {
-  cat("️ Columnas constantes detectadas. Se eliminarán:\n")
-  print(const_cols)
-  datos_preseleccion <- datos_preseleccion[, !(names(datos_preseleccion) %in% const_cols)]
-}
-
-char_cols <- names(datos_preseleccion)[sapply(datos_preseleccion, is.character)]
-if (length(char_cols) > 0) {
-  cat("️ Columnas de texto detectadas. Se eliminarán:\n")
-  print(char_cols)
-  datos_preseleccion <- datos_preseleccion[, !(names(datos_preseleccion) %in% char_cols)]
-}
-
-cat("\nDataset limpio. Filas:", nrow(datos_preseleccion), "Columnas:", ncol(datos_preseleccion), "\n")
-```
-
-```{r}
-# ------------------------------------------------------
-# 3. RANDOM FOREST EMBEDDED
-# ------------------------------------------------------
-
-set.seed(123)
-rf_modelo <- randomForest(
-  Exited ~ .,
-  data = na.omit(datos_preseleccion),
-  importance = TRUE,
-  ntree = 500
-)
-varImp(rf_modelo)
-cat("\n Modelo Random Forest entrenado correctamente.\n")
-```
-
-```{r}
-varImpPlot(rf_modelo, main = "Importancia de variables (Embedded Method)")
-```
-
-```{r}
-importancia <- importance(rf_modelo)
-importancia_ordenada <- importancia[order(importancia[, 1], decreasing = TRUE), , drop = FALSE]
-cat("\n Ranking de variables más importantes:\n")
-```
-
-```{r}
-print(head(importancia_ordenada, 15))
-```
-
-```{r}
-vars_top <- rownames(importancia_ordenada)[1:10]
-cat("\nVariables seleccionadas para el dataset final:\n")
-```
-
-```{r}
-print(vars_top)
-```
-
-```{r}
-datos_final <- datos_preseleccion[, c(vars_top, "Exited")]
-write.csv(datos_final, "datos_final.csv", row.names = FALSE)
-cat("\n 'datos_final.csv' guardado correctamente.\n")
-```
 

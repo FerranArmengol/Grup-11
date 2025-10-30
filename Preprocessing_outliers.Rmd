@@ -173,10 +173,10 @@ cat("Dataset listo para Mahalanobis Robusto. Dimensiones:",
 ```
 
 ```{r}
-# --- Calcular covarianza robusta ---
+#  Calcular covarianza robusta 
 cov_rob <- CovMcd(datos_num)
 
-# --- Verificar rango ---
+# Verificar rango
 rango <- qr(cov_rob@cov)$rank
 if (rango < ncol(datos_num)) {
   cat(" Matriz singular detectada (rango <", ncol(datos_num), "). Usando pseudoinversa.\n")
@@ -184,18 +184,18 @@ if (rango < ncol(datos_num)) {
 } else {
   inv_cov <- solve(cov_rob@cov)
 }
-# --- Calcular distancias Mahalanobis robustas ---
+# Calcular distancias Mahalanobis robustas
 center <- cov_rob@center
 x_centered <- scale(datos_num, center = center, scale = FALSE)
 dist_mahal_rob <- sqrt(rowSums((x_centered %*% inv_cov) * x_centered))
 
-# --- Determinar umbral y outliers ---
+# Determinar umbral y outliers
 umbral_rob <- sqrt(qchisq(0.99, df = ncol(datos_num)))
 outliers_mahal_rob <- which(dist_mahal_rob > umbral_rob)
 
 cat("Número de outliers multivariantes (Mahalanobis robusto):",
     length(outliers_mahal_rob), "\n")
-# --- Añadir resultado al dataset original ---
+# Añadir resultado al dataset original
 datos$Outlier_Mahalanobis_Rob <- FALSE
 datos$Outlier_Mahalanobis_Rob[outliers_mahal_rob] <- TRUE
 ```
@@ -204,10 +204,8 @@ datos$Outlier_Mahalanobis_Rob[outliers_mahal_rob] <- TRUE
 #install.packages("dbscan")
 library(dbscan)
 
-# Reutilizamos X e idx_complete del bloque KNN (ya completo y escalado)
-# Si ejecutas LOF por separado, descomenta estas dos líneas:
-# idx_complete <- complete.cases(datos_num)
-# X <- scale(as.matrix(datos_num[idx_complete, , drop = FALSE]))
+idx_complete <- complete.cases(datos_num)
+X <- scale(as.matrix(datos_num[idx_complete, , drop = FALSE]))
 
 k <- 5
 lof_score <- dbscan::lof(X, minPts = k)
