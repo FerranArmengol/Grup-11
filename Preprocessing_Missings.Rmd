@@ -412,7 +412,7 @@ if ("Exited" %in% names(datos_num)) {
   target <- datos_missing$Exited
 }
 
-# Varianza nula
+# Varianza nula 
 nzv <- nearZeroVar(datos_num, saveMetrics = TRUE)
 datos_nv <- datos_num[, !nzv$nzv]
 cat("Variables eliminadas por baja varianza:", sum(nzv$nzv), "\n")

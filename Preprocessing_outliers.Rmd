@@ -173,10 +173,10 @@ cat("Dataset listo para Mahalanobis Robusto. Dimensiones:",
 ```
 
 ```{r}
-#  Calcular covarianza robusta 
+# --- Calcular covarianza robusta ---
 cov_rob <- CovMcd(datos_num)
 
-# Verificar rango
+# --- Verificar rango ---
 rango <- qr(cov_rob@cov)$rank
 if (rango < ncol(datos_num)) {
   cat(" Matriz singular detectada (rango <", ncol(datos_num), "). Usando pseudoinversa.\n")
@@ -184,12 +184,12 @@ if (rango < ncol(datos_num)) {
 } else {
   inv_cov <- solve(cov_rob@cov)
 }
-# Calcular distancias Mahalanobis robustas
+# Calcular distancias Mahalanobis robustas 
 center <- cov_rob@center
 x_centered <- scale(datos_num, center = center, scale = FALSE)
 dist_mahal_rob <- sqrt(rowSums((x_centered %*% inv_cov) * x_centered))
 
-# Determinar umbral y outliers
+# Determinar umbral y outliers 
 umbral_rob <- sqrt(qchisq(0.99, df = ncol(datos_num)))
 outliers_mahal_rob <- which(dist_mahal_rob > umbral_rob)
 
@@ -203,7 +203,6 @@ datos$Outlier_Mahalanobis_Rob[outliers_mahal_rob] <- TRUE
 ```{r}
 #install.packages("dbscan")
 library(dbscan)
-
 idx_complete <- complete.cases(datos_num)
 X <- scale(as.matrix(datos_num[idx_complete, , drop = FALSE]))
 
@@ -252,13 +251,6 @@ datos <- datos %>%
 table(datos$Num_Metodos_Outlier)
 ```
 
-
-```{r}
-#  Crear datasets según la estrategia 
-# Mantener todo
-datos_preprocesado <- read.csv("datos_missing.csv", header = TRUE, sep = ",")
-cat("\n Dataset original:", nrow(datos_preprocesado), "observaciones")
-```
 Hemos decidido mantener todas las observaciones, ya que son datos reales que queremos predecir por lo tanto usaremos el csv datos missing.
 
 
