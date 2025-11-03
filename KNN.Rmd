@@ -1,0 +1,219 @@
+---
+title: "Untitled"
+author: "Max Ranz de la Iglesia"
+date: "2025-11-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(pROC)
+library(caret)
+library(ROSE)
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+library(ISLR)
+library(vcd)
+```
+
+```{r}
+datos<-read.csv("datos_relevantes.csv")
+datos <- datos %>%
+  filter(!is.na(Exited))
+hist(datos[, "Exited"])
+datos$Exited <- as.factor(datos$Exited)
+summary(datos$Exited)
+str(datos)
+# Tenemos la base de datos desbalanceada
+```
+
+```{r}
+set.seed(123)
+index <- createDataPartition(datos$Exited, p = 0.7, list = FALSE)
+train_data <- datos[index, ]
+test_data  <- datos[-index, ]
+str(train_data)
+str(test_data)
+```
+
+# Balanceo de los datos
+```{r}
+# MODELO 1: SIN BALANCEO
+
+ctrl_default <- trainControl(method = "repeatedcv", number = 10, repeats = 10)
+
+
+
+
+# MODELO 2: UNDERSAMPLING ("down")
+ctrl_down <- trainControl(method = "repeatedcv", number = 10, repeats = 10,
+                           sampling = "down")
+
+
+
+
+
+# MODELO 3: OVERSAMPLING ("up")
+ctrl_up <- trainControl(method = "repeatedcv", number = 10, repeats = 10,
+                         sampling = "up")
+
+
+
+
+# MODELO 4: ROSE
+ctrl_rose <- trainControl(method = "repeatedcv", number = 10, repeats = 10,
+                           sampling = "rose")
+
+
+
+
+# MODELO 5: SMOTE
+
+ctrl_smote <- trainControl(method = "repeatedcv", number = 10, repeats = 10,
+                            sampling = "smote")
+
+```
+
+# FAMD
+
+## Calcular ncp
+```{r}
+famd_model <- FAMD(train_data[, !(names(train_data) %in% "Exited")], ncp = 10, graph = FALSE)
+famd_model$eig #Elegimos ncp=6 con varianza explicativa de 80%
+```
+
+```{r}
+
+famd_res <- FAMD (train_data[, !(names(train_data) %in% "Exited")], ncp = 6, sup.var = NULL, ind.sup = NULL, graph = TRUE)
+
+X_train_famd <- famd_res$ind$coord
+
+train_famd <- data.frame(famd_res$ind$coord, Exited = train_data$Exited)
+test_famd  <- data.frame(predict(famd_res, newdata = test_data)$coord, Exited = test_data$Exited)
+
+```
+# KNN: Nos quedamos con el modelo sin balanceo ya que vemos que no nos afecta en la predicción los datos desbalanceados.
+```{r}
+train_famd$Exited<-factor(train_famd$Exited)
+test_famd$Exited<-factor(test_famd$Exited)
+
+# Modelo 1: SIN BALANCEO
+
+preProcValues <- preProcess(train_famd, method = c("center", "scale"))
+trainTransformed <- predict(preProcValues, train_famd)
+testTransformed <- predict(preProcValues, test_famd)
+
+
+knnModel1 <- train(Exited ~ ., data = trainTransformed, method = "knn", trControl = ctrl_default, tuneGrid = data.frame(k = c(3,5,7)))
+knnModel1
+
+best_model1<- knn3(Exited ~ ., data = trainTransformed, k = knnModel1$bestTune$k)
+best_model1
+predictions <- predict(best_model1, testTransformed,type = "class")
+# Calculate confusion matrix
+cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm
+result1<-data.frame(Accuracy = cm$overall["Accuracy"],
+           Sensitivity = cm$byClass["Sensitivity"],
+           Specificity = cm$byClass["Specificity"])
+
+
+# Modelo 2: UNDERSAMPLING ("down")
+preProcValues <- preProcess(train_famd, method = c("center", "scale"))
+trainTransformed <- predict(preProcValues, train_famd)
+testTransformed <- predict(preProcValues, test_famd)
+
+knnModel2 <- train(Exited ~ ., data = trainTransformed, method = "knn", trControl = ctrl_down, tuneGrid = data.frame(k = c(3,5,7)))
+knnModel2
+
+best_model2<- knn3(Exited ~ ., data = trainTransformed, k = knnModel2$bestTune$k)
+best_model2
+predictions <- predict(best_model2, testTransformed,type = "class")
+# Calculate confusion matrix
+cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm
+result2<-data.frame(Accuracy = cm$overall["Accuracy"],
+           Sensitivity = cm$byClass["Sensitivity"],
+           Specificity = cm$byClass["Specificity"])
+
+# Modelo 3: OVERSAMPLING ("up")
+preProcValues <- preProcess(train_famd, method = c("center", "scale"))
+trainTransformed <- predict(preProcValues, train_famd)
+testTransformed <- predict(preProcValues, test_famd)
+
+knnModel3 <- train(Exited ~ ., data = trainTransformed, method = "knn", trControl = ctrl_up, tuneGrid = data.frame(k = c(3,5,7)))
+knnModel3
+
+best_model3<- knn3(Exited ~ ., data = trainTransformed, k = knnModel3$bestTune$k)
+best_model3
+predictions <- predict(best_model3, testTransformed,type = "class")
+# Calculate confusion matrix
+cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm
+result3<-data.frame(Accuracy = cm$overall["Accuracy"],
+           Sensitivity = cm$byClass["Sensitivity"],
+           Specificity = cm$byClass["Specificity"])
+
+# Modelo 4: ROSE
+preProcValues <- preProcess(train_famd, method = c("center", "scale"))
+trainTransformed <- predict(preProcValues, train_famd)
+testTransformed <- predict(preProcValues, test_famd)
+
+knnModel4 <- train(Exited ~ ., data = trainTransformed, method = "knn", trControl = ctrl_rose, tuneGrid = data.frame(k = c(3,5,7)))
+
+knnModel4
+
+best_model4<- knn3(Exited ~ ., data = trainTransformed, k = knnModel4$bestTune$k)
+best_model4
+predictions <- predict(best_model4, testTransformed,type = "class")
+# Calculate confusion matrix
+cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm
+result4<-data.frame(Accuracy = cm$overall["Accuracy"],
+           Sensitivity = cm$byClass["Sensitivity"],
+           Specificity = cm$byClass["Specificity"])
+
+
+# Modelo 5: SMOTE
+preProcValues <- preProcess(train_famd, method = c("center", "scale"))
+trainTransformed <- predict(preProcValues, train_famd)
+testTransformed <- predict(preProcValues, test_famd)
+
+knnModel5<- train(Exited ~ ., data = trainTransformed, method = "knn", trControl = ctrl_smote, tuneGrid = data.frame(k = c(3,5,7)))
+knnModel5
+
+best_model5<- knn3(Exited ~ ., data = trainTransformed, k = knnModel5$bestTune$k)
+best_model5
+
+predictions <- predict(best_model5, testTransformed,type = "class")
+# Calculate confusion matrix
+cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm
+result5<-data.frame(Accuracy = cm$overall["Accuracy"],
+           Sensitivity = cm$byClass["Sensitivity"],
+           Specificity = cm$byClass["Specificity"])
+
+```
+
+# Predicción final
+
+```{r}
+
+datos<-read.csv("datos_relevantes.csv")
+datos_test <- datos %>%
+  filter(is.na(Exited))
+datos_test$Exited<-factor(datos_test$Exited)
+
+#Transformar el test_final con el mismo FAMD
+test_final_famd <- predict(famd_res, newdata = datos_test)$coord
+test_final_famd <- as.data.frame(test_final_famd)
+names(test_final_famd) <- gsub("dim ", "Dim.", names(test_final_famd), ignore.case = TRUE)
+
+#Predecir Exited en el test final
+pred_test_final <- predict(knnModel3, newdata = test_final_famd)
+resultado <- data.frame(ID = datos_test$ID, Exited = pred_test_final)
+```
+
