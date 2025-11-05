@@ -1,6 +1,6 @@
 ---
-title: "Untitled"
-author: "Max Ranz de la Iglesia"
+title: "EDA"
+author: "Grupo 11"
 date: "2025-10-06"
 output: html_document
 ---
@@ -29,6 +29,7 @@ dim(datos)
 head(datos)       
 summary(datos)   
 ```
+Hemos puesto ID de train como NA ya que a nosotros nos interesa test, despues en imputacion por missings lo imputaremos aleatoriamente. Hacemos esto para no repetir valores ID.
 
 ## Tipos de variables
 ```{r}
@@ -42,23 +43,23 @@ varNum <- names(clases)[which(clases %in% c("numeric", "integer"))]
 varCat <- names(clases)[which(clases %in% c("character", "factor"))]
 ```
 
-### Numéricas
+## Numéricas
 
 ```{r}
+#install.packages("psych")
 library(psych)
 psych::describe(datos[, varNum])
 ```
+
 ```{r}
 par(mfrow = c(2, 4))  
 for (var in varNum) {
   hist(datos[, var], main = paste0("Histograma variable ", var))
   boxplot(datos[, var], main = paste0("Boxplot variable ", var))
 }
-
 ```
 
-
-### Categóricas
+## Categóricas
 ```{r}
 for (var in varCat) {
   tablaAbs <- data.frame(table(datos[, var]))
@@ -72,6 +73,7 @@ for (var in varCat) {
   cat("==================================================\n")
 }
 ```
+
 ```{r}
 par(mfrow = c(2, 3))  
 for (var in varCat) {
@@ -79,79 +81,14 @@ for (var in varCat) {
 }
 par(mfrow = c(1, 1))  
 ```
-```{r}
-library(ggplot2)
-library(gridExtra)
 
-plots <- list()  # lista vacía
-i <- 1           # índice
-
-for (var in varCat) {
-  tabla <- data.frame(table(datos[, var]) / sum(table(datos[, var])))
-  
-  p <- ggplot(data = tabla, aes(x = Var1, y = Freq)) +
-        geom_bar(stat = "identity", fill = "steelblue") +
-        geom_text(aes(label = paste0(round(Freq * 100, 2), "%")),
-                  vjust = 0.9, color = "white", size = 3.5) +
-        theme_minimal() +
-        labs(title = paste("Distribución de", var), x = var, y = "Proporción")
-  
-  plots[[i]] <- p
-  i <- i + 1
-}
-
-# Mostrar todos los gráficos en un grid (ejemplo con 2 columnas)
-grid.arrange(grobs = plots, ncol = 2)
-```
 ## Análisis exploratorio Bivariante
 
 ### Num vs Num
 ```{r}
 cor(datos[, varNum])
 ```
-```{r}
-#install.packages("PerformanceAnalytics")
-library(PerformanceAnalytics)
-chart.Correlation(as.matrix(datos[, varNum]),histogram = TRUE,pch=12)
-```
 
-### Num vs Cat
-```{r}
-#for (varN in varNum) {
-  #for (varC in varCat) {
-  # print(psych::describeBy(datos[, varN], group = datos[, varC])) 
- # }
-#}
-```
-
-```{r}
-library(ggplot2)
-library(gridExtra)
-
-plots <- list()
-i <- 1
-
-for (varC in varCat) {
-  for (varN in varNum) {
-    
-    grafico <- ggplot(datos, aes(x = .data[[varN]], fill = .data[[varC]])) + 
-      geom_histogram(colour = "black",
-                     lwd = 0.75,
-                     linetype = 1,
-                     position = "identity",
-                     alpha = 0.5) +
-      labs(title = paste("Histograma de", varN, "por", varC),
-           x = varN, y = "Frecuencia", fill = varC) +
-      theme_minimal()
-    
-    plots[[i]] <- grafico
-    i <- i + 1
-  }
-}
-
-# Mostrar todos en un grid (2 columnas)
-grid.arrange(grobs = plots, ncol = 2)
-```
 
 ### Cat vs Cat
 ```{r}
@@ -165,6 +102,7 @@ for (varc1 in varCat) {
   }
 }
 ```
+
 ```{r}
 par(mfrow = c(3, 3))  
 for (varc1 in varCat) {
@@ -180,12 +118,15 @@ for (varc1 in varCat) {
 ## EDA
 
 ```{r}
+#install.packages("skimr")
 library(skimr)
 library(tidyverse)
 
 skim(datos)
 ```
+
 ```{r}
+#install.packages("visdat")
 library(visdat)
 
 vis_dat(datos)
@@ -198,10 +139,12 @@ datos %>% select(where(is.numeric)) %>%
 ```
 
 ```{r}
+#install.packages("inspectdf")
 library(inspectdf)
 
 inspect_types(datos) %>% show_plot()
 ```
+
 ```{r}
 inspect_num(datos) %>% show_plot()
 ```
@@ -210,9 +153,6 @@ inspect_num(datos) %>% show_plot()
 inspect_cat(datos) %>% show_plot()
 ```
 
-```{r}
-library(esquisse)
-esquisse::esquisser(datos)
-```
+
 
 

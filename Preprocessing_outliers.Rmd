@@ -1,10 +1,10 @@
 ---
-title: "Preprocessing outliers"
-author: "FERRAN ARMENGOL"
+title: "Preprocesamiento de outliers"
+author: "Grupo 11"
 date: "2025-10-30"
 output: html_document
 ---
-Preprocessing univariante
+# Preprocesamiento de outliers univariante
 ```{r}
 library(dplyr)
 ```
@@ -44,7 +44,6 @@ diagnose_category(datos)
 ```
 
 ```{r}
-
 mapply(function(x, name) {
   if (is.numeric(x)) {
     cat("var. ", name, ": \n\t min: ", min(x, na.rm = TRUE), "\n\t max: ", max(x, na.rm = TRUE), "\n")
@@ -54,18 +53,19 @@ mapply(function(x, name) {
 ```
 
 ```{r}
+#install.packages("EnvStats")
 library(EnvStats)
 
 IQROutlier <- function(variable, rmnas = TRUE) {
-  variable <- variable[!is.na(variable)]  # eliminar NAs
+  variable <- variable[!is.na(variable)]  
   IQ <- iqr(variable, na.rm = rmnas)
   intInf <- quantile(variable, probs = 0.25, na.rm = TRUE) - 1.5 * IQ
   intSup <- quantile(variable, probs = 0.75, na.rm = TRUE) + 1.5 * IQ
   posicions <- which(variable >= intSup | variable <= intInf)
   if (length(posicions) > 0) {
-    cat("Existeixen outliers en les posicions:", paste0(posicions, collapse = ", "))
+    cat("Existen outliers en las posiciones:", paste0(posicions, collapse = ", "))
   } else {
-    cat("No existeixen outliers")
+    cat("No existen outliers")
   }
   return(posicions)
 }
@@ -76,6 +76,7 @@ outliers_todos <- lapply(varNum, function(v) {
 })
 ```
 
+## Análisis de la variable edad y número de quejas
 ```{r}
 library(ggplot2)
 
@@ -83,7 +84,7 @@ variable <- "Age"
 
 boxplot(datos[, variable])
 boxplot.stats(datos[, variable])$out
-# Crear un boxplot
+
 ggplot(datos, aes(y = get(variable))) +
   geom_boxplot(fill = "skyblue", color = "black") +
   labs(title = paste0("Boxplot de ", variable)) +
@@ -94,7 +95,6 @@ variable <- "ComplaintsCount"
 boxplot(datos[, variable])
 boxplot.stats(datos[, variable])$out
 
-# Crear un boxplot
 ggplot(datos, aes(y = get(variable))) +
   geom_boxplot(fill = "skyblue", color = "black") +
   labs(title = paste0("Boxplot de ", variable)) +
@@ -105,8 +105,8 @@ ggplot(datos, aes(y = get(variable))) +
 variable <- "Age"
 valorEscalado <- scale(datos[, variable])
 ggplot(data.frame(valor = valorEscalado), aes(x = valor)) +
-  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") +  # Histograma
-  geom_vline(xintercept = c(3, -3), linetype = "dashed", color = "red", size = 1) + # Líneas horizontales
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") + 
+  geom_vline(xintercept = c(3, -3), linetype = "dashed", color = "red", size = 1) + 
   theme_minimal()
 ```
 
@@ -117,9 +117,10 @@ variable <- "Age"
 test <- EnvStats::rosnerTest(datos[, variable], k = 251)
 test
 ```
+Podemos ver que mediante la busqueda de outliers univariantes encontramos muchos valores atípicos, pero para nuestro proyecto usaremos metodos de busqueda multivariantes
 
-#Outliers multivariante
-#Mahalanobis
+# Procesamiento de outliers multivariante
+## Mahalanobis
 
 ```{r}
 varNum <- names(datos)[sapply(datos, is.numeric)]
@@ -133,7 +134,6 @@ cov_matrix <- cov(datos_num, use = "complete.obs")
 
 
 dist_mahal <- mahalanobis(datos_num, center, cov_matrix)
-# plot(density(dist_mahal)) # Después de missings
 
 umbral <- qchisq(0.99, df = ncol(datos_num))
 
@@ -143,8 +143,8 @@ cat("Número de outliers multivariantes detectados:", length(outliers_mahal), "\
 summary(dist_mahal)
 par(mfrow=c(1,1))
 hist(dist_mahal)
-#library(ggplot2)
 
+#library(ggplot2)
 ggplot(data.frame(dist_mahal), aes(x = 1:length(dist_mahal), y = dist_mahal)) +
   geom_point(color = "grey40") +
   geom_hline(yintercept = umbral, color = "red", linetype = "dashed") +
@@ -154,7 +154,7 @@ datos$Outlier_Mahalanobis <- FALSE
 datos$Outlier_Mahalanobis[outliers_mahal] <- TRUE
 ```
 
-#Mahalanobis robusto
+## Mahalanobis robusto
 ```{r}
 #install.packages("rrcov")
 library(rrcov)
@@ -173,10 +173,10 @@ cat("Dataset listo para Mahalanobis Robusto. Dimensiones:",
 ```
 
 ```{r}
-# --- Calcular covarianza robusta ---
+#Calcular covarianza robusta
 cov_rob <- CovMcd(datos_num)
 
-# --- Verificar rango ---
+# Verificar rango 
 rango <- qr(cov_rob@cov)$rank
 if (rango < ncol(datos_num)) {
   cat(" Matriz singular detectada (rango <", ncol(datos_num), "). Usando pseudoinversa.\n")
@@ -184,22 +184,23 @@ if (rango < ncol(datos_num)) {
 } else {
   inv_cov <- solve(cov_rob@cov)
 }
-# Calcular distancias Mahalanobis robustas 
+# Calculamos distancias Mahalanobis robustas 
 center <- cov_rob@center
 x_centered <- scale(datos_num, center = center, scale = FALSE)
 dist_mahal_rob <- sqrt(rowSums((x_centered %*% inv_cov) * x_centered))
 
-# Determinar umbral y outliers 
+# Determinamos umbral y cuales son outliers 
 umbral_rob <- sqrt(qchisq(0.99, df = ncol(datos_num)))
 outliers_mahal_rob <- which(dist_mahal_rob > umbral_rob)
 
 cat("Número de outliers multivariantes (Mahalanobis robusto):",
     length(outliers_mahal_rob), "\n")
+
 # Añadir resultado al dataset original
 datos$Outlier_Mahalanobis_Rob <- FALSE
 datos$Outlier_Mahalanobis_Rob[outliers_mahal_rob] <- TRUE
 ```
-#LOF
+## LOF
 ```{r}
 #install.packages("dbscan")
 library(dbscan)
@@ -215,13 +216,12 @@ outliers_lof <- which(idx_complete)[outliers_local]
 
 cat("Número de outliers multivariantes (LOF):", length(outliers_lof), "\n")
 
-# Flag en el dataset original
 datos$Outlier_LOF <- FALSE
 if (length(outliers_lof) > 0) datos$Outlier_LOF[outliers_lof] <- TRUE
 ```
 
 
-#ANÁLISIS Y DECISIÓN SOBRE OUTLIERS MULTIVARIANTES
+## ANÁLISIS Y DECISIÓN SOBRE OUTLIERS MULTIVARIANTES
 
 ```{r}
 #install.packages("VennDiagram")
@@ -238,7 +238,7 @@ print(round(100 * recuento_outliers / total_obs, 2))
 ```
 
 ```{r}
-# ---  Clasificación de observaciones ---
+# Clasificación de observaciones
 # Contar cuántos métodos marcan cada observación como outlier
 datos <- datos %>%
   mutate(
@@ -251,7 +251,7 @@ datos <- datos %>%
 table(datos$Num_Metodos_Outlier)
 ```
 
-Hemos decidido mantener todas las observaciones, ya que son datos reales que queremos predecir por lo tanto usaremos el csv datos missing.
+Hemos decidido mantener todas las observaciones, ya que son datos reales que queremos predecir por lo tanto usaremos la base de datos "datos_missing".
 
 
 

@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Preprocesamiento de missings"
 output: html_document
 date: "2025-10-07"
 ---
@@ -27,13 +27,14 @@ H_1 &: \text{Los datos no faltan completamente al azar (no MCAR)}
 $$
 
 ```{r}
+#install.packages("naniar")
 naniar::mcar_test(datos)
 # Tenemos un p-valor > 0.05, por lo tanto, no tenemos suficiente evidencia estafística para decir que los datos que faltan no son de manera aleatoria. Con lo que podemos decir que nuestros datos faltantes sonb MCAR (faltan al azar). 
 ```
 
-# 4.3 Patrones descriptivos de NA
+# Patrones descriptivos de NA
 
-## 4.3.2 Visulaización de los NA's
+## Visulaización de los NA's
 ```{r}
 library(visdat)
 library(ggplot2)
@@ -42,8 +43,8 @@ gg_miss_var(datos) + labs(y = "Look at all the missing ones")
 ```
 
 
-## 4.3.3 Comparación de cada variable con NA's y sin NA's
-### Conclusión: no encontramos grandes cambios en si afecta que una variable este missing en las otras (medias y desviaciones similares).
+##  Comparación de cada variable con NA's y sin NA's
+
 
 ```{r}
 aq_shadow <- bind_shadow(datos)
@@ -84,9 +85,9 @@ datos %>%
   ))
 
 ```
+Conclusión: no encontramos grandes cambios en si afecta que una variable este missing en las otras (medias y desviaciones similares).
 
 
-## 4.3.4 
 ```{r}
 prop_miss_case(datos)
 prop_miss_var(datos)
@@ -97,11 +98,12 @@ miss_var_table(datos)
 
 ```
 
-# 4.4 imputación basica (4.4.3 NO. 4.4.4 solo el grafico)
+# Imputación basica 
 
-## Imputación con la media (no nos interesa por las var.num.discretas)
+## Imputación con la media 
 
 ```{r}
+#install.packages("Hmisc")
 library(Hmisc)
 
 # Copiar el dataset original
@@ -121,7 +123,7 @@ for (var in vars_numericas) {
 }
 ```
 
-## Imputación con la mediana (no tendremos ese problema)
+## Imputación con la mediana 
 
 ```{r}
 # Crear una copia del dataset original
@@ -138,7 +140,6 @@ for (v in vars_numericas) {
 
 # Diagnóstico simple de las variables imputadas
 summary(datos_mediana)
-
 
 ```
 
@@ -167,11 +168,11 @@ ggplot(df_long, aes(x = Valor, fill = Tipo)) +
   scale_fill_manual(values = c("blue", "red", "green"))
   
 ```
-
+Podemos ver que son dos imputaciones muy separadas de la original
 
 # Imputación para todas las variables
 
-# MICE
+## MICE
 ```{r}
 datos_MICE<-datos
 datos_MICE$Surname <- NULL
@@ -185,40 +186,32 @@ datos_MICE$CustomerSegment  <- as.factor(datos_MICE$CustomerSegment)
 datos_MICE$MaritalStatus  <- as.factor(datos_MICE$MaritalStatus)
 datos_MICE$LoanStatus  <- as.factor(datos_MICE$LoanStatus)
 datos_MICE$Geography   <- as.factor(datos_MICE$Geography)
-
 ```
+Hemos decidido borrar las variables surname y X, ya que consideramos que hace la misa función que la variable ID, por lo tanto las borramos y no las imputamos, en el caso de el ID hemos decididoguardar el ID del test y imputar aleatoriamente para el train, ya que solo nos interesa en test.
 
 ```{r}
 #install.packages("mice")
 library(mice)
 set.seed(123)
-
 ```
 
-# IMPUTACIÓN MICE SEPARADA (NUMÉRICAS / CATEGÓRICAS)
 ```{r}
-
-# Cargar librerías
 library(naniar)
 library(mice)
 library(dplyr)
 library(ggplot2)
 
-# Preparar el dataset
-# Asegúrate de tener tu dataset cargado como 'datos_MICE'
-# datos_MICE <- df  # si tu dataset original se llama df
-
-#  Separar variables
+#  Separamos las variables(exited no la imputamos y ID la imputaremos despues aleatoriamente sin repetidos para train, ya que no nos interesa ahi)
 num_vars <- datos_MICE[, sapply(datos_MICE, is.numeric) & names(datos_MICE) != "ID" & names(datos_MICE) != "Exited"]
 cat_vars <- datos_MICE[, sapply(datos_MICE, is.factor)]
 
-# IMPUTACIÓN DE VARIABLES NUMÉRICAS
+# IMPUTACIÓN VARIABLES NUMÉRICAS
 
 set.seed(123)
 mice_num <- mice(num_vars, m = 5, method = "pmm", maxit = 5, printFlag = FALSE)
 num_list <- lapply(1:5, function(i) complete(mice_num, i))
 
-# IMPUTACIÓN DE VARIABLES CATEGÓRICAS
+# IMPUTACIÓN VARIABLES CATEGÓRICAS
 
 meth_cat <- make.method(cat_vars)
 meth_cat[] <- "polyreg"
@@ -227,9 +220,8 @@ set.seed(123)
 mice_cat <- mice(cat_vars, m = 5, method = meth_cat, maxit = 5, printFlag = FALSE)
 cat_list <- lapply(1:5, function(i) complete(mice_cat, i))
 
-# EVALUACIÓN DE IMPUTACIONES
+# EVALUAMOS LAS IMPUTACIONES
 
-# --- Evaluación de numéricas ---
 eval_num <- data.frame(Imputation = 1:5, MeanDiff = NA, SdDiff = NA)
 
 for (i in 1:5) {
@@ -251,7 +243,6 @@ for (i in 1:5) {
   eval_num$SdDiff[i] <- mean(sds, na.rm = TRUE)
 }
 
-# --- Evaluación de categóricas ---
 eval_cat <- data.frame(Imputation = 1:5, ChiSum = NA)
 
 for (i in 1:5) {
@@ -275,10 +266,9 @@ for (i in 1:5) {
   eval_cat$ChiSum[i] <- mean(chi_values, na.rm = TRUE)
 }
 
-# --- Combinar evaluaciones ---
 eval_results <- merge(eval_num, eval_cat, by = "Imputation")
 
-# Normalizar métricas y calcular score total
+# Normalizamos las métricas y calculamos el mejor score total
 eval_results <- eval_results %>%
   mutate(
     ScoreNum = scale(MeanDiff) + scale(SdDiff),
@@ -292,7 +282,7 @@ print(eval_results)
 best_imp <- eval_results$Imputation[1]
 best_imp
 
-# CREAR EL DATASET FINAL CON ESA IMPUTACIÓN
+# La mejor imputación será la que utilizaremos en nuestro proyecto
 
 num_imputed_best <- num_list[[best_imp]]
 cat_imputed_best <- cat_list[[best_imp]]
@@ -302,7 +292,6 @@ df_imputed <- cbind(ID = datos_MICE$ID, num_imputed_best, cat_imputed_best)
 
 colSums(is.na(df_imputed))
 
-# VISUALIZACIÓN DE RESULTADOS
 library(ggplot2)
 ggplot(eval_results, aes(x = factor(Imputation), y = TotalScore, fill = TotalScore)) +
   geom_col(width = 0.6) +
@@ -317,59 +306,73 @@ ggplot(eval_results, aes(x = factor(Imputation), y = TotalScore, fill = TotalSco
   ) +
   theme_minimal(base_size = 14)
 
-# Guardar dataset final
+# IMPUTACIÓN DEL ID
 
-# Asegurarte de que la columna ID es numérica
 df_imputed$ID <- as.numeric(df_imputed$ID)
 
-# Identificar cuántos NA hay
 num_na <- sum(is.na(df_imputed$ID))
 
-# Generar los IDs posibles para imputar (3001 a 10000)
+# Generamos ID del 3001 al 10000, ya que del 0 al 3000 corresponen al test
 ids_posibles <- 3001:10000
 
-# Eliminar los IDs que ya existen (para no repetir)
+# Eliminar los IDs que ya existen del 3001 al 10000 para no repetir
 ids_disponibles <- setdiff(ids_posibles, df_imputed$ID)
 
-# Comprobar que hay suficientes IDs disponibles
+# Comprobar que haya ID disponibles
 if (num_na > length(ids_disponibles)) {
   stop("No hay suficientes IDs disponibles entre 3001 y 10000 para imputar todos los NA.")
 }
 
-# Asignar los nuevos IDs aleatoriamente a los NA
+# Asignar los nuevos ID aleatoriamente a los NA
 set.seed(123)  
 df_imputed$ID[is.na(df_imputed$ID)] <- sample(ids_disponibles, num_na, replace = FALSE)
 df_imputed<-cbind(df_imputed,Exited=datos_MICE$Exited)
 write.csv(df_imputed, "datos_missing.csv", row.names = FALSE)
 ```
 
-#KNN
+##KNN
 
 ```{r}
-# Instalar si no lo tienes
 #install.packages("VIM")
-#library(VIM)
+library(VIM)
+
+datos_MICEKNN <- datos_MICE[,names(datos_MICE) != "ID" & names(datos_MICE) != "Exited"]
+knn_imputed <- kNN(datos_MICEKNN, k = 5)
+knn_imputed <- knn_imputed[, !grepl("_imp$", names(knn_imputed))]
+
+knn_imputed <- cbind(ID = datos_MICE$ID, knn_imputed)
+knn_imputed$ID <- as.numeric(knn_imputed$ID)
 
 
-#knn_imputed <- kNN(datos_MICE, k = 5)
-#knn_imputed <- knn_imputed[, !grepl("_imp$", names(knn_imputed))]
-#summary(knn_imputed)
+num_na <- sum(is.na(knn_imputed$ID))
+
+ids_posibles <- 3001:10000
+
+ids_disponibles <- setdiff(ids_posibles, knn_imputed$ID)
+
+if (num_na > length(ids_disponibles)) {
+  stop("No hay suficientes IDs disponibles entre 3001 y 10000 para imputar todos los NA.")
+}
+knn_imputed$ID[is.na(df_imputed$ID)] <- sample(ids_disponibles, num_na, replace = FALSE)
+knn_imputed<-cbind(df_imputed,Exited=datos_MICE$Exited)
+
+summary(knn_imputed)
 
 ```
 
-## Comparación gráfica: vemos que el MICE es mejor
+## Comparación gráfica: vemos que son muy similares pero escogemos MICE
 ```{r}
-#newBD <- data.frame(real = datos[, "Balance"], imputed = knn_imputed[, "Balance"])
-#df_long <- newBD %>%
-  #pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+newBD <- data.frame(real = datos[, "Balance"], imputed = knn_imputed[, "Balance"])
+df_long <- newBD %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
 
-#ggplot(df_long, aes(x = Valor, fill = Variable)) +
- # geom_density(alpha = 0.3) +  # Transparencia para mejor visualización
- # labs(title = "Densidad de las tres variables",
-  #     x = "Valor",
-  #     y = "Densidad") +
- # theme_minimal() +
- # scale_fill_manual(values = c("blue", "red"))
+ggplot(df_long, aes(x = Valor, fill = Variable)) +
+  geom_density(alpha = 0.3) +  # Transparencia para mejor visualización
+  labs(title = "Densidad de las tres variables",
+       x = "Valor",
+       y = "Densidad") +
+theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"))
 ```
 
 
@@ -387,66 +390,6 @@ ggplot(df_long, aes(x = Valor, fill = Variable)) +
   scale_fill_manual(values = c("blue", "red"))
 ```
 
-## Selección de variables
-```{r}
-
-library(caret)
-library(corrplot)
-library(randomForest)
-library(dplyr)
-library(tidyr)
-
-# Leer los datos
-datos_missing <- read.csv("datos_missing.csv", header = TRUE, sep = ",")
-```
-#Selección de las variables
-```{r}
-numeric_cols <- sapply(datos_missing, is.numeric)
-datos_num <- datos_missing[, numeric_cols]
-
-# Guardar variable objetivo y eliminarla de los numéricos
-if ("Exited" %in% names(datos_num)) {
-  target <- datos_num$Exited
-  datos_num <- datos_num[, names(datos_num) != "Exited", drop = FALSE]
-} else {
-  target <- datos_missing$Exited
-}
-
-# Varianza nula 
-nzv <- nearZeroVar(datos_num, saveMetrics = TRUE)
-datos_nv <- datos_num[, !nzv$nzv]
-cat("Variables eliminadas por baja varianza:", sum(nzv$nzv), "\n")
-```
-```{r}
-# Correlación
-cor_matrix <- cor(datos_nv, use = "complete.obs")
-high_cor <- findCorrelation(cor_matrix, cutoff = 0.9)
-if (length(high_cor) > 0) {
-  cat(" Eliminadas por alta correlación:", length(high_cor), "\n")
-  datos_corr <- datos_nv[, -high_cor, drop = FALSE]
-} else {
-  datos_corr <- datos_nv
-  cat(" No hay correlaciones altas.\n")
-}
-
-library("corrplot")
-
-matriz_corr <- cor(datos_nv[, 1:15])
-corrplot(matriz_corr, method = "circle")
-```
-
-```{r}
-# Combinaciones lineales
-datos_corr_na <- drop_na(datos_corr)
-combos <- findLinearCombos(datos_corr_na)
-if (!is.null(combos$remove)) {
-  datos_lineales <- datos_corr_na[, -combos$remove, drop = FALSE]
-  cat(" Eliminadas por combinaciones lineales:", length(combos$remove), "\n")
-} else {
-  datos_lineales <- datos_corr_na
-  cat(" No se encontraron combinaciones lineales.\n")
-}
-```
 
 
 
