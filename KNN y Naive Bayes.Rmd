@@ -95,6 +95,7 @@ train_famd <- data.frame(famd_res$ind$coord, Exited = train_data$Exited)
 test_famd  <- data.frame(predict(famd_res, newdata = test_data)$coord, Exited = test_data$Exited)
 
 ```
+
 # KNN: Nos quedamos con el modelo sin balanceo ya que vemos que no nos afecta en la predicción los datos desbalanceados.
 ```{r}
 train_famd$Exited<-factor(train_famd$Exited)
@@ -198,10 +199,9 @@ result5<-data.frame(Accuracy = cm$overall["Accuracy"],
 
 ```
 
-# Predicción final
+# Predicción final KNN
 
 ```{r}
-
 datos<-read.csv("datos_relevantes.csv")
 datos_test <- datos %>%
   filter(is.na(Exited))
@@ -217,3 +217,136 @@ pred_test_final <- predict(knnModel3, newdata = test_final_famd)
 resultado <- data.frame(ID = datos_test$ID, Exited = pred_test_final)
 ```
 
+# NAIVE BAYES
+```{r}
+set.seed(1994)
+
+ind_col <- which(names(train_data) == "Exited")
+
+default_idx <- sample(nrow(train_data), nrow(train_data) * 0.7)
+train <- train_data[default_idx, ]
+test  <- train_data[-default_idx, ]
+
+X_train <- train
+# X_train <- train[, -ind_col]  
+X_test  <- test[, -ind_col]
+y_train <- train[, ind_col]
+y_test  <- test[, ind_col]
+
+
+library(e1071)
+
+(nb_base <- naiveBayes(Exited ~ ., data = X_train))
+
+nb_grid <- expand.grid(
+  usekernel = c(TRUE, FALSE),
+  laplace = c(0, 0.5, 1),
+  adjust = c(0.75, 1, 1.25, 1.5)
+)
+
+accuracys <- c()
+
+for (i in 1:nrow(nb_grid)) {
+  kn <- nb_grid[i, "usekernel"]
+  lp <- nb_grid[i, "laplace"]
+  
+  nb_model <- naiveBayes(Exited ~ ., data = X_train,
+                         laplace = lp, kernel = kn)
+  
+  pred_train <- predict(nb_model, X_train)
+  tabla <- table(pred_train, y_train)
+  accuracy <- sum(diag(tabla)) / sum(tabla)
+  accuracys <- c(accuracys, accuracy)
+}
+
+nb_grid$Accuracy <- accuracys
+nb_grid
+
+head(predict(nb_base, X_test, type = "class"))
+head(predict(nb_base, X_test, type = "raw"))
+
+nb_trn_pred <- predict(nb_base, X_train)
+nb_tst_pred <- predict(nb_base, X_test)
+
+# Error de clasificación
+calc_class_err <- function(actual, predicted) {
+  mean(actual != predicted)
+}
+
+calc_class_err(actual = y_train, predicted = nb_trn_pred)
+calc_class_err(actual = y_test,  predicted = nb_tst_pred)
+
+# Matriz de confusión
+table(predicted = nb_tst_pred, actual = y_test)
+
+
+
+library(ggplot2)
+
+y_train <- factor(y_train)
+y_test  <- factor(y_test, levels = levels(y_train))
+
+# 1) Crear matrices numéricas con las mismas columnas
+mm_train <- as.data.frame(model.matrix(~ . - 1, data = X_train))
+mm_test  <- as.data.frame(model.matrix(~ . - 1, data = X_test))
+
+# Asegurar que mm_test tenga las mismas columnas que mm_train
+missing_cols <- setdiff(colnames(mm_train), colnames(mm_test))
+
+# Si faltan columnas, las agregamos correctamente (crear nuevas columnas)
+if (length(missing_cols) > 0) {
+  for (col in missing_cols) {
+    mm_test[[col]] <- 0
+  }
+}
+
+# Si sobran columnas en mm_test (que no están en train), las quitamos
+extra_cols <- setdiff(colnames(mm_test), colnames(mm_train))
+if (length(extra_cols) > 0) {
+  mm_test <- mm_test[, !(names(mm_test) %in% extra_cols), drop = FALSE]
+}
+
+# Finalmente, ordenamos las columnas en el mismo orden
+mm_test <- mm_test[, names(mm_train), drop = FALSE]
+
+# Reemplazamos NAs por 0 (solo por seguridad)
+mm_test[is.na(mm_test)] <- 0
+
+# 2) PCA en TRAIN y proyección en TEST
+pca <- prcomp(mm_train, center = TRUE, scale. = TRUE)
+Z_train <- predict(pca, newdata = mm_train)[, 1:2]
+Z_test  <- predict(pca, newdata = mm_test)[, 1:2]
+colnames(Z_train) <- c("PC1", "PC2")
+colnames(Z_test)  <- c("PC1", "PC2")
+
+# 3) Naive Bayes en el plano PCA
+nb <- naiveBayes(x = as.data.frame(Z_train), y = y_train, laplace = 0)
+
+# 4) Grid de visualización
+h <- 0.02
+x_min <- min(Z_train[,1]) - 1; x_max <- max(Z_train[,1]) + 1
+y_min <- min(Z_train[,2]) - 1; y_max <- max(Z_train[,2]) + 1
+grid <- expand.grid(PC1 = seq(x_min, x_max, by = h),
+                    PC2 = seq(y_min, y_max, by = h))
+grid$pred <- predict(nb, newdata = grid)
+
+# 5) Gráfico final
+pal_fill <- c("0" = "#FFAAAA", "1" = "#b3ffff")
+pal_pts  <- c("0" = "#FF0000", "1" = "#00ffff")
+
+df_train <- data.frame(Z_train, clase = y_train, split = "Train")
+df_test  <- data.frame(Z_test,  clase = y_test,  split = "Test")
+
+ggplot() +
+  geom_raster(data = grid, aes(PC1, PC2, fill = pred)) +
+  scale_fill_manual(values = pal_fill, name = "Fondo") +
+  geom_point(data = df_train, aes(PC1, PC2, color = clase), size = 1.8) +
+  geom_point(data = df_test,  aes(PC1, PC2, color = clase), size = 2.2, shape = 21) +
+  scale_color_manual(values = pal_pts, name = "Puntos") +
+  coord_equal(expand = FALSE, xlim = c(x_min, x_max), ylim = c(y_min, y_max)) +
+  labs(title = "Frontera Naive Bayes (e1071) en plano PCA",
+       x = "PC1", y = "PC2") +
+  theme_minimal()
+
+
+```
