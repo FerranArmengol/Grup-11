@@ -1,10 +1,12 @@
 ---
-title: "Untitled"
-author: "Max Ranz de la Iglesia"
+title: "Association rules"
+author: "Grupo 11"
 date: "2025-10-30"
 output: html_document
 ---
 
+# Association rules
+## Transformacion de los datos
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -19,6 +21,7 @@ library(FactoMineR)
 library(tidyverse)
 library(dplyr)
 ```
+Usaremos la base de datos con todas las variables, para poder ver asociaciones entre ellas.
 ```{r}
 bank_data<-read.csv("datos_missing.csv", header = TRUE, stringsAsFactors = TRUE)
 
@@ -54,19 +57,14 @@ bank_data <- bank_data %>%
   )
 
 ```
+Convertimos todas las variables a fcator ya que las reglas de asociacion solo funcionan con variables categóricas
 
 ```{r}
 str(bank_data)
 summary(bank_data)
 ```
 
-
 ```{r}
-# ASSOCIATION RULES 
-
-# CONVERTIR TODAS LAS VARIABLES A FACTORES 
-# (las reglas de asociación solo funcionan con variables categóricas)
-
 # CONVERTIR EN OBJETO DE TRANSACCIONES 
 ttr_bank <- as(bank_data, "transactions")
 ttr_bank
@@ -81,12 +79,12 @@ data.frame(SIZE) %>%
   geom_histogram(fill = "skyblue", color = "black") +
   labs(title = "Distribución del tamaño de las transacciones", x = "Número de items", y = "Frecuencia") +
   theme_bw()
-
-# FRECUENCIA DE ITEMS 
 itemFrequencyPlot(ttr_bank, topN = 20, type = "absolute", cex.names = 0.7)
+```
 
-# APLICAR APRIORI 
-# Ajusta los parámetros según la densidad de tu dataset:
+## REGLAS APRIORI
+```{r}
+# Ajusta los parámetros según la densidad del dataset:
 rules_bank <- apriori(
   ttr_bank,
   parameter = list(supp = 0.01, conf = 0.6, minlen = 1, maxlen = 5)
@@ -95,7 +93,7 @@ rules_bank <- apriori(
 summary(rules_bank)
 inspect(head(rules_bank, 10))
 
-# ORDENAR REGLAS 
+# ORDENAMOS las REGLAS segun lift y confianza
 rules_lift <- sort(rules_bank, by = "lift", decreasing = TRUE)
 inspect(head(rules_lift, 10))
 rules_conf <- sort(rules_bank, by = "confidence", decreasing = TRUE)
@@ -112,7 +110,10 @@ inspect(sort(rules_exited, by = "lift")[1:10])
 rules_exited_izquierda <- subset(rules_bank, subset = lhs %in% "Exited=Sí")
 inspect(sort(rules_exited, by = "lift")[1:10])
 
-# ELIMINAR REGLAS REDUNDANTES
+```
+
+## REGLAS REDUNDANTES
+```{r}
 reglas_redundantes <- rules_bank[is.redundant(x = rules_bank, measure = "confidence")]
 reglas_redundantes
 
@@ -121,11 +122,7 @@ reglas_Noredund
 
 reglas_Noredund <- sort(reglas_Noredund,by="lift")
 inspect(reglas_Noredund[1:10])
-
-
 ```
-
-
-
+Se puede comprobar que mediante reglas redundantes nos salen las mismas que por reglas de apriori.
 
 
