@@ -221,22 +221,20 @@ resultado <- data.frame(ID = datos_test$ID, Exited = pred_test_final)
 ```{r}
 set.seed(1994)
 
-ind_col <- which(names(train_data) == "Exited")
+# Usar datos transformados con FAMD
+X_train <- train_famd
+X_test  <- test_famd
+y_train <- train_famd$Exited
+y_test  <- test_famd$Exited
 
-default_idx <- sample(nrow(train_data), nrow(train_data) * 0.7)
-train <- train_data[default_idx, ]
-test  <- train_data[-default_idx, ]
-
-X_train <- train
-# X_train <- train[, -ind_col]  
-X_test  <- test[, -ind_col]
-y_train <- train[, ind_col]
-y_test  <- test[, ind_col]
 
 
 library(e1071)
 
-(nb_base <- naiveBayes(Exited ~ ., data = X_train))
+library(ROSE)
+train_bal <- ovun.sample(Exited ~ ., data = X_train, method = "both")$data
+(nb_base <- naiveBayes(Exited ~ ., data = train_bal))
+
 
 nb_grid <- expand.grid(
   usekernel = c(TRUE, FALSE),
@@ -250,8 +248,9 @@ for (i in 1:nrow(nb_grid)) {
   kn <- nb_grid[i, "usekernel"]
   lp <- nb_grid[i, "laplace"]
   
-  nb_model <- naiveBayes(Exited ~ ., data = X_train,
-                         laplace = lp, kernel = kn)
+  nb_model <- naiveBayes(Exited ~ ., data = train_bal,
+                       laplace = lp, kernel = kn)
+
   
   pred_train <- predict(nb_model, X_train)
   tabla <- table(pred_train, y_train)
@@ -347,6 +346,19 @@ ggplot() +
   labs(title = "Frontera Naive Bayes (e1071) en plano PCA",
        x = "PC1", y = "PC2") +
   theme_minimal()
+
+
+# Evaluación final con métricas
+cm_nb <- confusionMatrix(nb_tst_pred, y_test)
+cm_nb
+
+result_nb <- data.frame(
+  Accuracy = cm_nb$overall["Accuracy"],
+  Sensitivity = cm_nb$byClass["Sensitivity"],  # Recall
+  Specificity = cm_nb$byClass["Specificity"]
+)
+
+result_nb
 
 
 ```
