@@ -36,7 +36,7 @@ str(datos)
 
 ```{r}
 set.seed(123)
-index <- createDataPartition(datos$Exited, p = 0.7, list = FALSE)
+index <- createDataPartition(datos$Exited, p = 0.8, list = FALSE)
 train_data <- datos[index, ]
 test_data  <- datos[-index, ]
 str(train_data)
@@ -370,5 +370,32 @@ result_nb <- data.frame(
 )
 
 result_nb
+
+
+```
+
+# Predicción final Naive Bayes
+```{r}
+datos <- read.csv("datos_relevantes.csv")
+
+# Seleccionar los datos sin la variable de salida (Exited)
+datos_test <- datos %>%
+  filter(is.na(Exited))
+
+# Aplicar el mismo FAMD al conjunto test final
+test_final_famd <- predict(famd_res, newdata = datos_test)$coord
+test_final_famd <- as.data.frame(test_final_famd)
+names(test_final_famd) <- gsub("dim ", "Dim.", names(test_final_famd), ignore.case = TRUE)
+
+# Predecir Exited en el test final usando el modelo Naive Bayes entrenado
+pred_test_final_nb <- predict(nb_base, newdata = test_final_famd)
+
+pred_test_final_nb <- ifelse(pred_test_final_nb == "0", "No", "Yes")
+
+# Crear dataframe con resultados finales
+resultado_bayes <- data.frame(ID = datos_test$ID, Exited = pred_test_final_nb)
+write.csv(resultado_bayes, "resultados_bayes.csv", row.names = FALSE)
+# Mostrar primeras filas
+head(resultado_bayes)
 ```
 Como en el KNN, la matriz de confusion esta hecha a partir de los valores negativos, haciendo que los KPI's esten al reves, por lo tanto observaremos la especificidad (que será el recall).
