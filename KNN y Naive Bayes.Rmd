@@ -30,13 +30,18 @@ hist(datos[, "Exited"])
 datos$Exited <- as.factor(datos$Exited)
 summary(datos$Exited)
 str(datos)
+# Prevalencia real del churn (Exited = 1)
+p_est <- mean(datos$Exited == 1)
+p_est
+
 # Tenemos la base de datos desbalanceada
 ```
+
 ## Validación cruzada
 
 ```{r}
 set.seed(123)
-index <- createDataPartition(datos$Exited, p = 0.8, list = FALSE)
+index <- createDataPartition(datos$Exited, p = 0.7, list = FALSE)
 train_data <- datos[index, ]
 test_data  <- datos[-index, ]
 str(train_data)
@@ -119,12 +124,34 @@ best_model1<- knn3(Exited ~ ., data = trainTransformed, k = knnModel1$bestTune$k
 best_model1
 predictions <- predict(best_model1, testTransformed,type = "class")
 
+p_corte <- p_est
+p_corte
+
+probs_knn <- predict(best_model1, testTransformed, type="prob")[, "1"]
+
+pred_knn_corte <- ifelse(probs_knn > p_corte, "1", "0")
+pred_knn_corte <- factor(pred_knn_corte, levels = levels(testTransformed$Exited))
+
 # Calculamos la matriz de confusion 
-cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm <- confusionMatrix(pred_knn_corte, testTransformed$Exited)
 cm
+m <- cm$table
+
+TN <- m[1,1]
+FP <- m[1,2]
+FN <- m[2,1]
+TP <- m[2,2]
+
+precision <- TP / (TP + FP)
+recall    <- TP / (TP + FN)
+
+f1_score <- 2 * precision * recall / (precision + recall)
+
+f1_score
 result1<-data.frame(Accuracy = cm$overall["Accuracy"],
            Sensitivity = cm$byClass["Sensitivity"],
-           Specificity = cm$byClass["Specificity"])
+           Specificity = cm$byClass["Specificity"],
+           F1score = f1_score)
 
 # Modelo 2: UNDERSAMPLING ("down")
 
@@ -139,12 +166,36 @@ best_model2<- knn3(Exited ~ ., data = trainTransformed, k = knnModel2$bestTune$k
 best_model2
 predictions <- predict(best_model2, testTransformed,type = "class")
 
+p_corte <- p_est
+p_corte
+
+probs_knn <- predict(best_model2, testTransformed, type="prob")[, "1"]
+
+pred_knn_corte <- ifelse(probs_knn > p_corte, "1", "0")
+pred_knn_corte <- factor(pred_knn_corte, levels = levels(testTransformed$Exited))
+
 # Calculamos la matriz de confusion 
-cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm <- confusionMatrix(pred_knn_corte, testTransformed$Exited)
 cm
+
+m <- cm$table
+
+TN <- m[1,1]
+FP <- m[1,2]
+FN <- m[2,1]
+TP <- m[2,2]
+
+precision <- TP / (TP + FP)
+recall    <- TP / (TP + FN)
+
+f1_score <- 2 * precision * recall / (precision + recall)
+
+f1_score
+
 result2<-data.frame(Accuracy = cm$overall["Accuracy"],
            Sensitivity = cm$byClass["Sensitivity"],
-           Specificity = cm$byClass["Specificity"])
+           Specificity = cm$byClass["Specificity"],
+           F1score = f1_score)
 
 # Modelo 3: OVERSAMPLING ("up")
 
@@ -158,13 +209,37 @@ knnModel3
 best_model3<- knn3(Exited ~ ., data = trainTransformed, k = knnModel3$bestTune$k)
 best_model3
 predictions <- predict(best_model3, testTransformed,type = "class")
+predictionsobs3 <- predict(best_model3, testTransformed,type = "prob")
+p_corte <- p_est
+p_corte
+
+probs_knn <- predict(best_model3, testTransformed, type="prob")[, "1"]
+
+pred_knn_corte <- ifelse(probs_knn > p_corte, "1", "0")
+pred_knn_corte <- factor(pred_knn_corte, levels = levels(testTransformed$Exited))
 
 # Calculamos la matriz de confusion 
-cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm <- confusionMatrix(pred_knn_corte, testTransformed$Exited)
 cm
+
+m <- cm$table
+
+TN <- m[1,1]
+FP <- m[1,2]
+FN <- m[2,1]
+TP <- m[2,2]
+
+precision <- TP / (TP + FP)
+recall    <- TP / (TP + FN)
+
+f1_score <- 2 * precision * recall / (precision + recall)
+
+f1_score
+
 result3<-data.frame(Accuracy = cm$overall["Accuracy"],
            Sensitivity = cm$byClass["Sensitivity"],
-           Specificity = cm$byClass["Specificity"])
+           Specificity = cm$byClass["Specificity"],
+           F1score = f1_score)
 
 # Modelo 4: ROSE
 preProcValues <- preProcess(train_famd, method = c("center", "scale"))
@@ -178,13 +253,38 @@ knnModel4
 best_model4<- knn3(Exited ~ ., data = trainTransformed, k = knnModel4$bestTune$k)
 best_model4
 predictions <- predict(best_model4, testTransformed,type = "class")
+predictionsobs4 <- predict(best_model4, testTransformed,type = "prob")
+
+p_corte <- p_est
+p_corte
+
+probs_knn <- predict(best_model4, testTransformed, type="prob")[, "1"]
+
+pred_knn_corte <- ifelse(probs_knn > p_corte, "1", "0")
+pred_knn_corte <- factor(pred_knn_corte, levels = levels(testTransformed$Exited))
 
 # Calculamos la matriz de confusion 
-cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm <- confusionMatrix(pred_knn_corte, testTransformed$Exited)
 cm
+
+m <- cm$table
+
+TN <- m[1,1]
+FP <- m[1,2]
+FN <- m[2,1]
+TP <- m[2,2]
+
+precision <- TP / (TP + FP)
+recall    <- TP / (TP + FN)
+
+f1_score <- 2 * precision * recall / (precision + recall)
+
+f1_score
+
 result4<-data.frame(Accuracy = cm$overall["Accuracy"],
            Sensitivity = cm$byClass["Sensitivity"],
-           Specificity = cm$byClass["Specificity"])
+           Specificity = cm$byClass["Specificity"],
+           F1score = f1_score)
 
 # Modelo 5: SMOTE
 
@@ -199,17 +299,41 @@ best_model5<- knn3(Exited ~ ., data = trainTransformed, k = knnModel5$bestTune$k
 best_model5
 
 predictions <- predict(best_model5, testTransformed,type = "class")
+predictionsobs5 <- predict(best_model5, testTransformed,type = "prob")
+
+p_corte <- p_est
+p_corte
+
+probs_knn <- predict(best_model5, testTransformed, type="prob")[, "1"]
+
+pred_knn_corte <- ifelse(probs_knn > p_corte, "1", "0")
+pred_knn_corte <- factor(pred_knn_corte, levels = levels(testTransformed$Exited))
 
 # Calculamos la matriz de confusion 
-cm <- confusionMatrix(predictions, testTransformed$Exited)
+cm <- confusionMatrix(pred_knn_corte, testTransformed$Exited)
 cm
+
+m <- cm$table
+
+TN <- m[1,1]
+FP <- m[1,2]
+FN <- m[2,1]
+TP <- m[2,2]
+
+precision <- TP / (TP + FP)
+recall    <- TP / (TP + FN)
+
+f1_score <- 2 * precision * recall / (precision + recall)
+
+f1_score
 result5<-data.frame(Accuracy = cm$overall["Accuracy"],
            Sensitivity = cm$byClass["Sensitivity"],
-           Specificity = cm$byClass["Specificity"])
+           Specificity = cm$byClass["Specificity"],
+           F1score = f1_score)
 
 ```
 
-Nos quedamos con los metodos de balanceo oversampling y SMOTE, ya que tienen mayor recall, en este caso la matriz de confusion esta hecha a partir de los valores negativos, haciendo que los KPI's esten al reves, por lo tanto observaremos la especificidad (que sera el recall), la cual en estos dos métodos es de 0.3310345.
+Nos quedamos con los metodos de balanceo oversampling y SMOTE, ya que tienen mayor recall, en este caso la matriz de confusion esta hecha a partir de los valores negativos, haciendo que los KPI's esten al reves, por lo tanto observaremos la especificidad (que sera el recall), la cual en estos dos métodos es de 0.6229885, 
 
 # Predicción final KNN
 
@@ -227,8 +351,42 @@ names(test_final_famd) <- gsub("dim ", "Dim.", names(test_final_famd), ignore.ca
 
 #Predecir Exited en el test final
 
-pred_test_final <- predict(knnModel3, newdata = test_final_famd)
-resultado <- data.frame(ID = datos_test$ID, Exited = pred_test_final)
+probs_knn_final <- predict(best_model3, newdata = test_final_famd, type = "prob")[, "1"]
+pred_knn_final_corte1 <- ifelse(probs_knn_final > p_corte, "1", "0")
+
+pred_test_final_corte1 <- ifelse(pred_knn_final_corte1 == "0", "No", "Yes")
+
+# Crear dataframe con resultados finales
+resultado_knn_corte1 <- data.frame(ID = datos_test$ID, Exited = pred_test_final_corte1)
+write.csv(resultado_knn_corte1, "resultado_knn_corte1.csv", row.names = FALSE)
+
+```
+
+Al usar el punto de corte vemos como en los otros metodos de balanceo aumenta el f1 score por lo tanto tambien los probaremos para la competencia, como el no balanceado, el undersampling y el ROSE dan los mismos resultados usaremos cualquiera de ellos.
+
+```{r}
+datos<-read.csv("datos_relevantes.csv")
+datos_test <- datos %>%
+  filter(is.na(Exited))
+datos_test$Exited<-factor(datos_test$Exited)
+
+#Transformar el test_final con el mismo FAMD
+
+test_final_famd <- predict(famd_res, newdata = datos_test)$coord
+test_final_famd <- as.data.frame(test_final_famd)
+names(test_final_famd) <- gsub("dim ", "Dim.", names(test_final_famd), ignore.case = TRUE)
+
+#Predecir Exited en el test final
+
+probs_knn_final <- predict(best_model4, newdata = test_final_famd, type = "prob")[, "1"]
+pred_knn_final_corte2 <- ifelse(probs_knn_final > p_corte, "1", "0")
+
+pred_test_final_corte2 <- ifelse(pred_knn_final_corte2 == "0", "No", "Yes")
+
+# Crear dataframe con resultados finales
+resultado_knn_corte2 <- data.frame(ID = datos_test$ID, Exited = pred_test_final_corte2)
+write.csv(resultado_knn_corte2, "resultado_knn_corte2.csv", row.names = FALSE)
+
 ```
 
 # NAIVE BAYES
@@ -363,10 +521,26 @@ ggplot() +
 cm_nb <- confusionMatrix(nb_tst_pred, y_test)
 cm_nb
 
+# Extraer matriz numérica
+m <- cm_nb$table
+
+TN <- m[1,1]
+FP <- m[1,2]
+FN <- m[2,1]
+TP <- m[2,2]
+
+precision <- TP / (TP + FP)
+recall    <- TP / (TP + FN)
+
+f1_score <- 2 * precision * recall / (precision + recall)
+
+f1_score
+
 result_nb <- data.frame(
   Accuracy = cm_nb$overall["Accuracy"],
   Sensitivity = cm_nb$byClass["Sensitivity"],  
-  Specificity = cm_nb$byClass["Specificity"]    
+  Specificity = cm_nb$byClass["Specificity"],
+  F1score = f1_score
 )
 
 result_nb
