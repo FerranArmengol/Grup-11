@@ -238,3 +238,105 @@ datos_relevantes <- datos[, c("ID", variables_relevantes)]
 write.csv(datos_relevantes, "datos_relevantes.csv", row.names = FALSE)
 ```
 
+```{r}
+datosrob<-read.csv("datos_sin_outliersrob.csv")
+
+clases <- sapply(datosrob, class)
+varNum <- names(clases)[which(clases %in% c("numeric", "integer"))]
+varCat <- names(clases)[which(clases %in% c("character", "factor"))]
+
+# Variables numéricas 
+pvals_num <- sapply(varNum, function(v) {
+  mod <- lm(datosrob[[v]] ~ datosrob$Exited)
+  anova(mod)[["Pr(>F)"]][1]
+})
+
+# Variables categóricas 
+pvals_cat <- sapply(varCat, function(v) {
+  if (length(unique(na.omit(datosrob[[v]]))) > 1) {
+    suppressWarnings(chisq.test(table(datosrob[[v]], datosrob$Exited))$p.value)
+  } else {
+    NA  
+  }
+})
+
+# Combinar y mostrar pvalores
+pvals <- c(pvals_num, pvals_cat)
+pvals <- sort(pvals)
+
+# Mostrar todas ordenadas por significación
+pvals
+
+# Variables que aportan muy poco (p > 0.05)
+variables_poco_relevantes <- names(pvals[pvals > 0.05])
+variables_poco_relevantes
+variables_relevantes <- names(pvals[pvals < 0.05])
+variables_relevantes
+
+datos_relevantesrob <- datosrob[, c("ID", variables_relevantes)]
+
+df_filtrado <- datos_relevantesrob %>% 
+  filter(ID > 3000)
+
+duplicados <- duplicated(df_filtrado[, !names(df_filtrado) %in% c("ID")])
+
+sum(duplicados)
+
+df_duplicadas <- df_filtrado[duplicados, ]
+
+datos_limpios <- datos_relevantesrob %>% 
+  anti_join(df_duplicadas, by = names(datos_relevantesrob))
+
+write.csv(datos_limpios, "datos_relevantesrob.csv", row.names = FALSE)
+```
+
+```{r}
+datos2<-read.csv("datos_sin_outliers2.csv")
+
+clases <- sapply(datos2, class)
+varNum <- names(clases)[which(clases %in% c("numeric", "integer"))]
+varCat <- names(clases)[which(clases %in% c("character", "factor"))]
+
+# Variables numéricas 
+pvals_num <- sapply(varNum, function(v) {
+  mod <- lm(datos2[[v]] ~ datos2$Exited)
+  anova(mod)[["Pr(>F)"]][1]
+})
+
+# Variables categóricas 
+pvals_cat <- sapply(varCat, function(v) {
+  if (length(unique(na.omit(datos2[[v]]))) > 1) {
+    suppressWarnings(chisq.test(table(datos2[[v]], datos2$Exited))$p.value)
+  } else {
+    NA  
+  }
+})
+
+# Combinar y mostrar pvalores
+pvals <- c(pvals_num, pvals_cat)
+pvals <- sort(pvals)
+
+# Mostrar todas ordenadas por significación
+pvals
+
+# Variables que aportan muy poco (p > 0.05)
+variables_poco_relevantes <- names(pvals[pvals > 0.05])
+variables_poco_relevantes
+variables_relevantes <- names(pvals[pvals < 0.05])
+variables_relevantes
+
+datos_relevantes2 <- datos2[, c("ID", variables_relevantes)]
+df_filtrado <- datos_relevantes2 %>% 
+  filter(ID > 3000)
+
+duplicados <- duplicated(df_filtrado[, !names(df_filtrado) %in% c("ID")])
+
+sum(duplicados)
+
+df_duplicadas <- df_filtrado[duplicados, ]
+
+datos_limpios <- datos_relevantes2 %>% 
+  anti_join(df_duplicadas, by = names(datos_relevantes2))
+
+write.csv(datos_limpios, "datos_relevantes2.csv", row.names = FALSE)
+```
