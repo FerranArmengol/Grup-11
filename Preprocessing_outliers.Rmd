@@ -11,6 +11,13 @@ library(dplyr)
 
 ```{r}
 datos <- read.csv("datos_missing.csv", header = TRUE, sep = ",")
+test2<- datos %>%
+  filter(is.na(Exited))
+
+datos <- datos %>%
+  filter(!is.na(Exited))
+ID<-datos$ID
+datos <- datos %>% select(-ID)
 
 dim(datos)
 head(datos) 
@@ -150,8 +157,9 @@ ggplot(data.frame(dist_mahal), aes(x = 1:length(dist_mahal), y = dist_mahal)) +
   geom_hline(yintercept = umbral, color = "red", linetype = "dashed") +
   labs(title = "Distancia de Mahalanobis", x = "Observación", y = "Distancia") +
   theme_minimal()
-datos$Outlier_Mahalanobis <- FALSE
-datos$Outlier_Mahalanobis[outliers_mahal] <- TRUE
+datos2<-datos
+datos2$Outlier_Mahalanobis <- FALSE
+datos2$Outlier_Mahalanobis[outliers_mahal] <- TRUE
 ```
 
 ## Mahalanobis robusto
@@ -197,8 +205,8 @@ cat("Número de outliers multivariantes (Mahalanobis robusto):",
     length(outliers_mahal_rob), "\n")
 
 # Añadir resultado al dataset original
-datos$Outlier_Mahalanobis_Rob <- FALSE
-datos$Outlier_Mahalanobis_Rob[outliers_mahal_rob] <- TRUE
+datos2$Outlier_Mahalanobis_Rob <- FALSE
+datos2$Outlier_Mahalanobis_Rob[outliers_mahal_rob] <- TRUE
 ```
 ## LOF
 ```{r}
@@ -216,8 +224,8 @@ outliers_lof <- which(idx_complete)[outliers_local]
 
 cat("Número de outliers multivariantes (LOF):", length(outliers_lof), "\n")
 
-datos$Outlier_LOF <- FALSE
-if (length(outliers_lof) > 0) datos$Outlier_LOF[outliers_lof] <- TRUE
+datos2$Outlier_LOF <- FALSE
+if (length(outliers_lof) > 0) datos2$Outlier_LOF[outliers_lof] <- TRUE
 ```
 
 
@@ -240,7 +248,7 @@ print(round(100 * recuento_outliers / total_obs, 2))
 ```{r}
 # Clasificación de observaciones
 # Contar cuántos métodos marcan cada observación como outlier
-datos <- datos %>%
+datos2 <- datos2 %>%
   mutate(
     Num_Metodos_Outlier = rowSums(across(
       c(Outlier_Mahalanobis, Outlier_Mahalanobis_Rob, Outlier_LOF),
@@ -248,10 +256,19 @@ datos <- datos %>%
     ))
   )
 
-table(datos$Num_Metodos_Outlier)
+table(datos2$Num_Metodos_Outlier)
+datos<-cbind(ID,datos)
+datos_outliers1 <- datos %>% filter(datos2$Outlier_Mahalanobis_Rob == FALSE)
+datos_outliers2<- datos %>% filter(datos2$Num_Metodos_Outlier < 2)
+
+datos_outliers1<-rbind(datos_outliers1,test2)
+datos_outliers2<-rbind(datos_outliers2,test2)
+write.csv(datos_outliers1, "datos_sin_outliersrob.csv", row.names = FALSE)
+write.csv(datos_outliers2, "datos_sin_outliers2.csv", row.names = FALSE)
+
 ```
 
 Hemos decidido mantener todas las observaciones, ya que son datos reales que queremos predecir por lo tanto usaremos la base de datos "datos_missing".
-
+Por otro lado hemos creado otros dos csv: sin outliers que hayan sido outliers multivariantes robustos y sin outliers que hayan salido en dos metodos para ver si se observa mejora.
 
 
