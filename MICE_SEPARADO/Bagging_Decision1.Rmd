@@ -264,7 +264,7 @@ comparacion
 # Random Forest with caret 
 ```{r}
 # =============================================================================
-# BAGGING con diferentes estrategias de balanceo de clases (sin SMOTE)
+# BAGGING con diferentes estrategias de balanceo de clases 
 # =============================================================================
 # 1. Arreglar nombres ANTES de ROSE
 names(train) <- make.names(names(train), unique = TRUE)

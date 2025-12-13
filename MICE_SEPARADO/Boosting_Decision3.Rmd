@@ -1,10 +1,9 @@
 ---
-title: "Boosting"
+title: "Boosting Decision 3"
 author: "Grupo 11"
-date: "2025-12-01"
-output: pdf_document
+date: "2025-12-13"
+output: html_document
 ---
-
 
 # Preparación de los datos
 
@@ -22,7 +21,7 @@ library(smotefamily)
 library(DMwR2) 
 ```
 ```{r}
-mydata <- read.csv("C:/Users/usuario/Downloads/datos_relevantes_Train_Decision1.csv") 
+mydata <- read.csv("C:/Users/usuario/Downloads/datos_relevantes_Train_Decision3.csv") 
 
 
 mydata <- mydata %>%
@@ -181,7 +180,6 @@ datos_test <- read.csv("datos_relevantes_Test.csv")
 
 id_test <- datos_test$ID
 
-
 # --- MUY IMPORTANTE ---
 # 1. Convertir las columnas factor al mismo tipo
 for (col in factor_cols) {
@@ -207,7 +205,7 @@ submission <- data.frame(
 
 submission
 
-write.csv(submission, "Boosting_GBM_Over_0.545_Decision1.csv", row.names = FALSE)
+write.csv(submission, "Bagging_GBM_Over_0.545_Decision1.csv", row.names = FALSE)
 ```
 
 ## GBM SMOTE
@@ -408,8 +406,6 @@ datos_test <- read.csv("datos_relevantes_Test.csv")
 # Guardar ID
 id_test <- datos_test$ID
 
-# Eliminar columnas no usadas por el modelo
-datos_test <- datos_test %>% select(-ID)
 
 # --- MUY IMPORTANTE ---
 # Aplicar EXACTAMENTE el mismo preprocesado que train
@@ -426,8 +422,8 @@ for (col in setdiff(names(datos_test), factor_cols)) {
 }
 
 # Predicción con XGB
-probs_submission <- predict(caret.xgb, newdata = datos_test, type = "prob")[,"1"]
-pred_submission <- ifelse(probs_submission > 0.245,"Yes", "No")
+probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"Class1"]
+pred_submission <- ifelse(probs_submission > 0.320,"Yes", "No")
 
 # Crear submission
 submission <- data.frame(
@@ -437,7 +433,6 @@ submission <- data.frame(
 
 submission
 
-#write.csv(submission, "Boosting_XGB_sinBalanceo_0.245_Relev.csv", row.names = FALSE)
+write.csv(submission, "Boosting_XGB_SMOTE_0.320_Decision3.csv", row.names = FALSE)
 
 ```
-
