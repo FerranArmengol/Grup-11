@@ -273,6 +273,8 @@ Hemos decidido mantener todas las observaciones, ya que son datos reales que que
 ```{r}
 datos_decision_2 <- datos %>%
   filter(!Outlier_Mahalanobis)
+datos_decision_2 <- datos_decision_2[, -c(23,24,25,26)]
+
 
 write.csv(datos_decision_2,file = "datos_decision_2_sin_mahalanobis.csv",row.names = FALSE)
 
@@ -283,6 +285,8 @@ cat("DECISIÓN 2:",nrow(datos_decision_2),"observaciones tras eliminar Mahalanob
 ```{r}
 datos_decision_3 <- datos %>%
   filter(!(Outlier_Mahalanobis & Outlier_LOF))
+
+datos_decision_3 <- datos_decision_3[, -c(23,24,25,26)]
 
 write.csv(datos_decision_3,file = "datos_decision_3_sin_mahalanobis_y_lof.csv",row.names = FALSE)
 
