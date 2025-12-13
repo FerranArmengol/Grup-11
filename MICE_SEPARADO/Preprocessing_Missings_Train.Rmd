@@ -1,0 +1,398 @@
+---
+title: "Preprocesamiento de missings"
+output: html_document
+date: "2025-10-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Lectura de los datos
+```{r}
+#install.packages("dplyr")
+library(dplyr)
+datos <-read.csv("train.csv", header = TRUE, sep = ",")
+datos$ID<-NA
+datos$Exited <- as.factor(datos$Exited)
+
+datos$HasCrCard <- as.factor(datos$HasCrCard)
+datos$IsActiveMember <- as.factor(datos$IsActiveMember)
+datos$SavingsAccountFlag <- as.factor(datos$SavingsAccountFlag)
+```
+
+# Little Test
+$$
+\begin{aligned}
+H_0 &: \text{Los datos faltan completamente al azar (MCAR)} \\
+H_1 &: \text{Los datos no faltan completamente al azar (no MCAR)}
+\end{aligned}
+$$
+
+```{r}
+#install.packages("naniar")
+naniar::mcar_test(datos)
+# Tenemos un p-valor > 0.05, por lo tanto, no tenemos suficiente evidencia estafística para decir que los datos que faltan no son de manera aleatoria. Con lo que podemos decir que nuestros datos faltantes sonb MCAR (faltan al azar). 
+```
+
+# Patrones descriptivos de NA
+
+## Visulaización de los NA's
+```{r}
+library(visdat)
+library(ggplot2)
+library(naniar)
+gg_miss_var(datos) + labs(y = "Look at all the missing ones")
+```
+
+
+##  Comparación de cada variable con NA's y sin NA's
+
+
+```{r}
+aq_shadow <- bind_shadow(datos)
+```
+
+
+```{r}
+# Ejemplo con la variable BALANCE comparada con CreditScore
+datos %>%
+  bind_shadow() %>%
+  group_by(Balance_NA) %>%
+  summarise(
+    mean_CreditScore = mean(CreditScore, na.rm = TRUE),
+    sd_CreditScore = sd(CreditScore, na.rm = TRUE),
+    n = n()
+  )
+
+```
+```{r}
+aq_shadow %>%
+  ggplot(aes(x = EstimatedSalary, colour = Balance_NA)) +
+  geom_density() +
+  labs(title = "Distribución de salario según missing en Balance")
+
+```
+
+```{r}
+# Modelo que compara una variable con todas las demás
+datos %>%
+  bind_shadow() %>%
+  group_by(CreditScore_NA) %>%  # Cambia aquí la variable con missing que quieras analizar
+  summarise(across(
+    where(is.numeric),
+    list(mean = ~mean(.x, na.rm = TRUE),
+         sd = ~sd(.x, na.rm = TRUE),
+         min = ~min(.x, na.rm = TRUE),
+         max = ~max(.x, na.rm = TRUE))
+  ))
+
+```
+Conclusión: no encontramos grandes cambios en si afecta que una variable este missing en las otras (medias y desviaciones similares).
+
+
+```{r}
+prop_miss_case(datos)
+prop_miss_var(datos)
+miss_case_summary(datos)
+miss_case_table(datos)
+miss_var_summary(datos)
+miss_var_table(datos)
+
+```
+
+# Imputación basica 
+
+## Imputación con la media 
+
+```{r}
+#install.packages("Hmisc")
+library(Hmisc)
+
+# Copiar el dataset original
+datos_media <- datos
+
+# Vector con las variables numéricas a imputar
+vars_numericas <- c(
+  "X", "Tenure", "NetPromoterScore", "TransactionFrequency",
+  "Age", "ComplaintsCount", "EstimatedSalary", "AvgTransactionAmount",
+  "DigitalEngagementScore", "ID", "CreditScore", "Balance",
+  "NumOfProducts", "Exited"
+)
+
+# Imputar con la media en cada variable numérica
+for (var in vars_numericas) {
+  datos_media[[var]] <- with(datos_media, Hmisc::impute(datos_media[[var]], mean))
+}
+```
+
+## Imputación con la mediana 
+
+```{r}
+# Crear una copia del dataset original
+datos_mediana <- datos
+
+# Seleccionar automáticamente las variables numéricas
+vars_numericas <- names(datos_mediana)[sapply(datos_mediana, is.numeric)]
+
+# Imputar los NA con la mediana de cada variable
+for (v in vars_numericas) {
+  mediana <- median(datos_mediana[[v]], na.rm = TRUE)
+  datos_mediana[[v]][is.na(datos_mediana[[v]])] <- mediana
+}
+
+# Diagnóstico simple de las variables imputadas
+summary(datos_mediana)
+
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Crear un dataframe con las tres versiones de la variable
+df_long <- data.frame(
+  Original = datos$Balance,
+  Media = datos_media$Balance,
+  Mediana = datos_mediana$Balance
+) %>%
+  pivot_longer(cols = everything(),
+               names_to = "Tipo",
+               values_to = "Valor")
+
+# Graficar densidades
+ggplot(df_long, aes(x = Valor, fill = Tipo)) +
+  geom_density(alpha = 0.3) +
+  labs(title = "Distribución de 'Balance' original vs imputaciones",
+       x = "Balance",
+       y = "Densidad") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red", "green"))
+  
+```
+Podemos ver que son dos imputaciones muy separadas de la original
+
+# Imputación para todas las variables
+
+## MICE
+```{r}
+datos_MICE<-datos
+datos_MICE$Surname <- NULL
+datos_MICE$X<-NULL
+datos_MICE$HasCrCard <- as.factor(datos_MICE$HasCrCard)
+datos_MICE$IsActiveMember <- as.factor(datos_MICE$IsActiveMember)
+datos_MICE$SavingsAccountFlag <- as.factor(datos_MICE$SavingsAccountFlag)
+datos_MICE$Gender  <- as.factor(datos_MICE$Gender)
+datos_MICE$EducationLevel    <- as.factor(datos_MICE$EducationLevel)
+datos_MICE$CustomerSegment  <- as.factor(datos_MICE$CustomerSegment)
+datos_MICE$MaritalStatus  <- as.factor(datos_MICE$MaritalStatus)
+datos_MICE$LoanStatus  <- as.factor(datos_MICE$LoanStatus)
+datos_MICE$Geography   <- as.factor(datos_MICE$Geography)
+```
+Hemos decidido borrar las variables surname y X, ya que consideramos que hace la misa función que la variable ID, por lo tanto las borramos y no las imputamos, en el caso de el ID hemos decididoguardar el ID del test y imputar aleatoriamente para el train, ya que solo nos interesa en test.
+
+```{r}
+#install.packages("mice")
+library(mice)
+set.seed(123)
+```
+
+```{r}
+library(naniar)
+library(mice)
+library(dplyr)
+library(ggplot2)
+
+#  Separamos las variables(exited no la imputamos y ID la imputaremos despues aleatoriamente sin repetidos para train, ya que no nos interesa ahi)
+num_vars <- datos_MICE[, sapply(datos_MICE, is.numeric) & names(datos_MICE) != "ID"]
+cat_vars <- datos_MICE[, sapply(datos_MICE, is.factor)]
+
+# IMPUTACIÓN VARIABLES NUMÉRICAS
+
+set.seed(123)
+mice_num <- mice(num_vars, m = 5, method = "pmm", maxit = 5, printFlag = FALSE)
+num_list <- lapply(1:5, function(i) complete(mice_num, i))
+
+# IMPUTACIÓN VARIABLES CATEGÓRICAS
+
+meth_cat <- make.method(cat_vars)
+meth_cat[] <- "polyreg"
+
+set.seed(123)
+mice_cat <- mice(cat_vars, m = 5, method = meth_cat, maxit = 5, printFlag = FALSE)
+cat_list <- lapply(1:5, function(i) complete(mice_cat, i))
+
+# EVALUAMOS LAS IMPUTACIONES
+
+eval_num <- data.frame(Imputation = 1:5, MeanDiff = NA, SdDiff = NA)
+
+for (i in 1:5) {
+  imp_df <- num_list[[i]]
+  
+  diffs <- c()
+  sds <- c()
+  for (v in names(imp_df)) {
+    obs_mean <- mean(num_vars[[v]], na.rm = TRUE)
+    imp_mean <- mean(imp_df[[v]], na.rm = TRUE)
+    diffs <- c(diffs, abs(obs_mean - imp_mean))
+    
+    obs_sd <- sd(num_vars[[v]], na.rm = TRUE)
+    imp_sd <- sd(imp_df[[v]], na.rm = TRUE)
+    sds <- c(sds, abs(obs_sd - imp_sd))
+  }
+  
+  eval_num$MeanDiff[i] <- mean(diffs, na.rm = TRUE)
+  eval_num$SdDiff[i] <- mean(sds, na.rm = TRUE)
+}
+
+eval_cat <- data.frame(Imputation = 1:5, ChiSum = NA)
+
+for (i in 1:5) {
+  imp_df <- cat_list[[i]]
+  chi_values <- c()
+  
+  for (v in names(imp_df)) {
+    obs_tab <- table(na.omit(cat_vars[[v]]))
+    imp_tab <- table(imp_df[[v]])
+    all_levels <- union(names(obs_tab), names(imp_tab))
+    obs_tab <- obs_tab[match(all_levels, names(obs_tab), nomatch = 0)]
+    imp_tab <- imp_tab[match(all_levels, names(imp_tab), nomatch = 0)]
+    obs_tab[is.na(obs_tab)] <- 0
+    imp_tab[is.na(imp_tab)] <- 0
+    
+    suppressWarnings({
+      chi <- tryCatch(chisq.test(rbind(obs_tab, imp_tab))$statistic, error = function(e) NA)
+    })
+    chi_values <- c(chi_values, chi)
+  }
+  eval_cat$ChiSum[i] <- mean(chi_values, na.rm = TRUE)
+}
+
+eval_results <- merge(eval_num, eval_cat, by = "Imputation")
+
+# Normalizamos las métricas y calculamos el mejor score total
+eval_results <- eval_results %>%
+  mutate(
+    ScoreNum = scale(MeanDiff) + scale(SdDiff),
+    ScoreCat = scale(ChiSum),
+    TotalScore = ScoreNum + ScoreCat
+  ) %>%
+  arrange(TotalScore)
+
+print(eval_results)
+
+best_imp <- eval_results$Imputation[1]
+best_imp
+
+# La mejor imputación será la que utilizaremos en nuestro proyecto
+
+num_imputed_best <- num_list[[best_imp]]
+cat_imputed_best <- cat_list[[best_imp]]
+df_imputed <- cbind(ID = datos_MICE$ID, num_imputed_best, cat_imputed_best)
+
+# Verificar que no haya NA
+
+colSums(is.na(df_imputed))
+
+library(ggplot2)
+ggplot(eval_results, aes(x = factor(Imputation), y = TotalScore, fill = TotalScore)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = round(TotalScore, 2)), vjust = -0.5, size = 4) +
+  scale_fill_gradient(low = "skyblue", high = "navy") +
+  labs(
+    title = "Comparación de imputaciones MICE (numéricas + categóricas)",
+    subtitle = "Menor TotalScore = Imputación más coherente",
+    x = "Número de imputación",
+    y = "Puntuación total (TotalScore)",
+    fill = "TotalScore"
+  ) +
+  theme_minimal(base_size = 14)
+
+# IMPUTACIÓN DEL ID
+
+df_imputed$ID <- as.numeric(df_imputed$ID)
+
+num_na <- sum(is.na(df_imputed$ID))
+
+# Generamos ID del 3001 al 10000, ya que del 0 al 3000 corresponen al test
+ids_posibles <- 3001:10000
+
+# Eliminar los IDs que ya existen del 3001 al 10000 para no repetir
+ids_disponibles <- setdiff(ids_posibles, df_imputed$ID)
+
+# Comprobar que haya ID disponibles
+if (num_na > length(ids_disponibles)) {
+  stop("No hay suficientes IDs disponibles entre 3001 y 10000 para imputar todos los NA.")
+}
+
+# Asignar los nuevos ID aleatoriamente a los NA
+set.seed(123)  
+df_imputed$ID[is.na(df_imputed$ID)] <- sample(ids_disponibles, num_na, replace = FALSE)
+df_imputed<-cbind(df_imputed)
+write.csv(df_imputed, "datos_missing_train.csv", row.names = FALSE)
+```
+
+##KNN
+
+```{r}
+#install.packages("VIM")
+library(VIM)
+
+datos_MICEKNN <- datos_MICE[,names(datos_MICE) != "ID" & names(datos_MICE) != "Exited"]
+knn_imputed <- kNN(datos_MICEKNN, k = 5)
+knn_imputed <- knn_imputed[, !grepl("_imp$", names(knn_imputed))]
+
+knn_imputed <- cbind(ID = datos_MICE$ID, knn_imputed)
+knn_imputed$ID <- as.numeric(knn_imputed$ID)
+
+
+num_na <- sum(is.na(knn_imputed$ID))
+
+ids_posibles <- 3001:10000
+
+ids_disponibles <- setdiff(ids_posibles, knn_imputed$ID)
+
+if (num_na > length(ids_disponibles)) {
+  stop("No hay suficientes IDs disponibles entre 3001 y 10000 para imputar todos los NA.")
+}
+knn_imputed$ID[is.na(df_imputed$ID)] <- sample(ids_disponibles, num_na, replace = FALSE)
+knn_imputed<-cbind(df_imputed,Exited=datos_MICE$Exited)
+
+summary(knn_imputed)
+
+```
+
+## Comparación gráfica: vemos que son muy similares pero escogemos MICE
+```{r}
+newBD <- data.frame(real = datos[, "Balance"], imputed = knn_imputed[, "Balance"])
+df_long <- newBD %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+ggplot(df_long, aes(x = Valor, fill = Variable)) +
+  geom_density(alpha = 0.3) +  # Transparencia para mejor visualización
+  labs(title = "Densidad de las tres variables",
+       x = "Valor",
+       y = "Densidad") +
+theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"))
+```
+
+
+```{r}
+newBD <- data.frame(real = datos[, "Balance"], imputed = df_imputed[, "Balance"])
+df_long <- newBD %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+ggplot(df_long, aes(x = Valor, fill = Variable)) +
+  geom_density(alpha = 0.3) +  # Transparencia para mejor visualización
+  labs(title = "Densidad de las tres variables",
+       x = "Valor",
+       y = "Densidad") +
+  theme_minimal() +
+  scale_fill_manual(values = c("blue", "red"))
+```
+
+
+
+

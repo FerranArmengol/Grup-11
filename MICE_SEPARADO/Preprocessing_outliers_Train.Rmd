@@ -1,0 +1,292 @@
+---
+title: "Preprocesamiento de outliers"
+author: "Grupo 11"
+date: "2025-10-30"
+output: html_document
+---
+
+# Preprocesamiento de outliers univariante
+
+```{r}
+library(dplyr)
+
+datos <- read.csv("datos_missing_Train.csv")
+
+
+dim(datos)
+head(datos) 
+summary(datos) 
+
+clases <- sapply(datos, class)
+datos$HasCrCard <- as.factor(datos$HasCrCard)
+datos$IsActiveMember <- as.factor(datos$IsActiveMember)
+datos$SavingsAccountFlag <- as.factor(datos$SavingsAccountFlag)
+
+varNum <- names(datos)[sapply(datos, is.numeric)]
+varCat <- names(datos)[!sapply(datos, is.numeric)]
+```
+
+```{r}
+#install.packages("dlookr")
+library(dlookr)
+dlookr::diagnose(datos)
+```
+
+```{r}
+head(overview(datos), n = 9)
+```
+
+```{r}
+diagnose_numeric(datos)
+```
+
+```{r}
+diagnose_category(datos)
+```
+
+```{r}
+mapply(function(x, name) {
+  if (is.numeric(x)) {
+    cat("var. ", name, ": \n\t min: ", min(x, na.rm = TRUE), "\n\t max: ", max(x, na.rm = TRUE), "\n")
+  }
+  invisible(NULL)
+}, datos[, varNum], colnames(datos[, varNum]))
+```
+
+```{r}
+#install.packages("EnvStats")
+library(EnvStats)
+
+IQROutlier <- function(variable, rmnas = TRUE) {
+  variable <- variable[!is.na(variable)]  
+  IQ <- iqr(variable, na.rm = rmnas)
+  intInf <- quantile(variable, probs = 0.25, na.rm = TRUE) - 1.5 * IQ
+  intSup <- quantile(variable, probs = 0.75, na.rm = TRUE) + 1.5 * IQ
+  posicions <- which(variable >= intSup | variable <= intInf)
+  if (length(posicions) > 0) {
+    cat("Existen outliers en las posiciones:", paste0(posicions, collapse = ", "))
+  } else {
+    cat("No existen outliers")
+  }
+  return(posicions)
+}
+
+outliers_todos <- lapply(varNum, function(v) {
+  cat("\n\nVariable:", v, "\n")
+  IQROutlier(datos[[v]])
+})
+```
+
+## Análisis de la variable edad y número de quejas
+```{r}
+library(ggplot2)
+
+variable <- "Age"
+
+boxplot(datos[, variable])
+boxplot.stats(datos[, variable])$out
+
+ggplot(datos, aes(y = get(variable))) +
+  geom_boxplot(fill = "skyblue", color = "black") +
+  labs(title = paste0("Boxplot de ", variable)) +
+  theme_minimal()
+
+variable <- "ComplaintsCount"
+
+boxplot(datos[, variable])
+boxplot.stats(datos[, variable])$out
+
+ggplot(datos, aes(y = get(variable))) +
+  geom_boxplot(fill = "skyblue", color = "black") +
+  labs(title = paste0("Boxplot de ", variable)) +
+  theme_minimal()
+```
+
+```{r}
+variable <- "Age"
+valorEscalado <- scale(datos[, variable])
+ggplot(data.frame(valor = valorEscalado), aes(x = valor)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") + 
+  geom_vline(xintercept = c(3, -3), linetype = "dashed", color = "red", size = 1) + 
+  theme_minimal()
+```
+
+```{r}
+library(EnvStats)
+
+variable <- "Age"
+test <- EnvStats::rosnerTest(datos[, variable], k = 251)
+test
+```
+Podemos ver que mediante la busqueda de outliers univariantes encontramos muchos valores atípicos, pero para nuestro proyecto usaremos metodos de busqueda multivariantes
+
+# Procesamiento de outliers multivariante
+## Mahalanobis
+
+```{r}
+varNum <- names(datos)[sapply(datos, is.numeric)]
+datos_num <- datos[, varNum]
+summary(datos_num)
+```
+
+```{r}
+center <- colMeans(datos_num, na.rm = TRUE)
+cov_matrix <- cov(datos_num, use = "complete.obs")
+
+
+dist_mahal <- mahalanobis(datos_num, center, cov_matrix)
+umbral <- qchisq(0.95, df = ncol(datos_num))
+
+
+outliers_mahal <- which(dist_mahal > umbral)
+cat("Número de outliers multivariantes detectados:", length(outliers_mahal), "\n")
+summary(dist_mahal)
+par(mfrow=c(1,1))
+hist(dist_mahal)
+
+```
+
+## Mahalanobis robusto
+```{r}
+#install.packages("rrcov")
+library(rrcov)
+library(caret)
+library(MASS)  
+
+cor_matrix <- cor(datos_num, use = "pairwise.complete.obs")
+high_cor <- findCorrelation(cor_matrix, cutoff = 0.95)
+if (length(high_cor) > 0) {
+  cat(" Eliminando", length(high_cor), "variables con correlación > 0.95\n")
+  datos_num <- datos_num[, -high_cor, drop = FALSE]
+}
+
+cat("Dataset listo para Mahalanobis Robusto. Dimensiones:",
+    dim(datos_num)[1], "x", dim(datos_num)[2], "\n")
+```
+
+```{r}
+#Calcular covarianza robusta
+cov_rob <- CovMcd(datos_num)
+
+# Verificar rango 
+rango <- qr(cov_rob@cov)$rank
+if (rango < ncol(datos_num)) {
+  cat(" Matriz singular detectada (rango <", ncol(datos_num), "). Usando pseudoinversa.\n")
+  inv_cov <- MASS::ginv(cov_rob@cov)
+} else {
+  inv_cov <- solve(cov_rob@cov)
+}
+# Calculamos distancias Mahalanobis robustas 
+center <- cov_rob@center
+x_centered <- scale(datos_num, center = center, scale = FALSE)
+dist_mahal_rob <- sqrt(rowSums((x_centered %*% inv_cov) * x_centered))
+
+# Determinamos umbral y cuales son outliers 
+umbral_rob <- sqrt(qchisq(0.95, df = ncol(datos_num)))
+outliers_mahal_rob <- which(dist_mahal_rob > umbral_rob)
+
+cat("Número de outliers multivariantes (Mahalanobis robusto):",
+    length(outliers_mahal_rob), "\n")
+
+```
+## LOF
+```{r}
+#install.packages("dbscan")
+library(dbscan)
+idx_complete <- complete.cases(datos_num)
+X <- scale(as.matrix(datos_num[idx_complete, , drop = FALSE]))
+
+k <- 5
+lof_score <- dbscan::lof(X, minPts = k)
+
+umbral_lof <- quantile(lof_score, 0.95, na.rm = TRUE)
+outliers_local <- which(lof_score > umbral_lof)
+outliers_lof <- which(idx_complete)[outliers_local]
+
+cat("Número de outliers multivariantes (LOF):", length(outliers_lof), "\n")
+
+datos$Outlier_LOF <- FALSE
+if (length(outliers_lof) > 0) datos$Outlier_LOF[outliers_lof] <- TRUE
+```
+
+
+## ANÁLISIS Y DECISIÓN SOBRE OUTLIERS MULTIVARIANTES
+
+
+```{r}
+#paso previo
+datos$Outlier_Mahalanobis <- FALSE
+datos$Outlier_Mahalanobis_Rob <- FALSE
+datos$Outlier_LOF <- FALSE
+
+if (length(outliers_mahal) > 0)
+  datos$Outlier_Mahalanobis[outliers_mahal] <- TRUE
+
+if (length(outliers_mahal_rob) > 0)
+  datos$Outlier_Mahalanobis_Rob[outliers_mahal_rob] <- TRUE
+
+if (length(outliers_lof) > 0)
+  datos$Outlier_LOF[outliers_lof] <- TRUE
+
+```
+```{r}
+#install.packages("VennDiagram")
+library(dplyr)
+library(VennDiagram)
+library(ggplot2)
+recuento_outliers <- sapply(
+  c("Outlier_Mahalanobis", "Outlier_Mahalanobis_Rob", "Outlier_LOF"),
+  function(x) sum(datos[[x]], na.rm = TRUE)
+)
+print(recuento_outliers)
+total_obs <- nrow(datos)
+print(round(100 * recuento_outliers / total_obs, 2))
+```
+
+```{r}
+# Clasificación de observaciones
+# Contar cuántos métodos marcan cada observación como outlier
+datos <- datos %>%
+  mutate(
+    Num_Metodos_Outlier = rowSums(across(
+      c(Outlier_Mahalanobis, Outlier_Mahalanobis_Rob, Outlier_LOF),
+      ~ .x == TRUE
+    ))
+  )
+
+table(datos$Num_Metodos_Outlier)
+```
+
+### Decisión 1: Mantener oultiers
+```{r}
+datos_decision_1 <- datos
+datos_decision_1 <- datos_decision_1[, -c(23,24,25,26)]
+write.csv(datos_decision_1,file = "datos_decision_1_sin_eliminar_outliers.csv",row.names = FALSE)
+cat("DECISIÓN 1:",nrow(datos_decision_1),"observaciones guardadas\n")
+```
+
+Hemos decidido mantener todas las observaciones, ya que son datos reales que queremos predecir por lo tanto usaremos la base de datos "datos_missing".
+
+
+
+### Decisión 2: Eliminar oultiers Mahalanobis 
+```{r}
+datos_decision_2 <- datos %>%
+  filter(!Outlier_Mahalanobis)
+
+write.csv(datos_decision_2,file = "datos_decision_2_sin_mahalanobis.csv",row.names = FALSE)
+
+cat("DECISIÓN 2:",nrow(datos_decision_2),"observaciones tras eliminar Mahalanobis\n")
+```
+
+### Decisión 3: Eliminar oultiers Mahalanobis + LOF
+```{r}
+datos_decision_3 <- datos %>%
+  filter(!(Outlier_Mahalanobis & Outlier_LOF))
+
+write.csv(datos_decision_3,file = "datos_decision_3_sin_mahalanobis_y_lof.csv",row.names = FALSE)
+
+cat("DECISIÓN 3:",nrow(datos_decision_3),"observaciones tras eliminar Mahalanobis + LOF\n")
+```
+
+
