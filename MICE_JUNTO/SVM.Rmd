@@ -1,6 +1,6 @@
 ---
 title: "SVM"
-author: "Max Ranz de la Iglesia"
+author: "Grupo 11"
 date: "2025-12-05"
 output: html_document
 ---
@@ -119,7 +119,6 @@ for (method in balance_methods) {
   }
 }
 
-# Mostrar resultados
 print(results)
 
 ```

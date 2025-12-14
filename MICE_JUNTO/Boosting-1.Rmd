@@ -5,12 +5,12 @@ date: "2025-12-01"
 output: pdf_document
 ---
 
-
 # Preparación de los datos
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
 ```{r}
 library(caret)
 library(gbm)
@@ -21,6 +21,7 @@ library(ROSE)
 library(smotefamily)
 library(DMwR2) 
 ```
+
 ```{r}
 mydata <- read.csv("datos_relevantes.csv") %>%
 filter(!is.na(Exited)) %>%
@@ -40,6 +41,7 @@ train <- mydata[ind, ]
 factor_cols <- names(train)[sapply(train, is.factor)]
 test <- mydata[-ind, ]
 ```
+
 ```{r}
 # F1 score
 
@@ -50,7 +52,6 @@ r <- cm$byClass["Recall"]
 }
 
 # Ajustar punto de corte
-
 threshold_eval <- function(probs, true){
 cortes <- seq(0.1, 0.9, 0.01)
 f1s <- recalls <- numeric(length(cortes))
@@ -68,19 +69,19 @@ data.frame(threshold=cortes, F1=f1s, Recall=recalls)
 ```
 
 ```{r}
-### OVERSAMPLING
+# OVERSAMPLING
 train_over <- upSample(
   train[, -which(names(train)=="Exited")],
   train$Exited, yname="Exited"
 )
 
-### UNDERSAMPLING
+# UNDERSAMPLING
 train_under <- downSample(
   train[, -which(names(train)=="Exited")],
   train$Exited, yname="Exited"
 )
 
-### ROSE
+# ROSE
 
 bad_cols <- sapply(train, function(x) !is.numeric(x) && !is.factor(x))
 
@@ -157,6 +158,7 @@ F1 <- F1(cm_cut)
 F1
 Recall
 ```
+
 ## GBM SMOTE
 ```{r}
 trControl2 <- trainControl(method="cv", number=5,sampling="smote")
@@ -348,38 +350,34 @@ results_smote
 # Predicción final
 
 ```{r}
-# Cargar datos completos
 datos_full <- read.csv("datos_missing.csv")
 summary(datos_full$Exited)
 table(is.na(datos_full$Exited))
-# Filtrar solo las filas sin etiqueta (test final)
+
 datos_test <- datos_full %>% filter(is.na(Exited))
 
-# Guardar ID
+
 id_test <- datos_test$ID
 
-# Eliminar columnas no usadas por el modelo
+
 datos_test <- datos_test %>% select(-ID, -Exited)
 
-# --- MUY IMPORTANTE ---
-# Aplicar EXACTAMENTE el mismo preprocesado que train
-# 1. Convertir las columnas factor al mismo tipo
+# Aplicamos el mismo preprocesado que train
+
 for (col in factor_cols) {
   if (col %in% names(datos_test)) {
     datos_test[[col]] <- as.factor(datos_test[[col]])
   }
 }
 
-# 2. Convertir todo lo demás a numérico
 for (col in setdiff(names(datos_test), factor_cols)) {
   datos_test[[col]] <- as.numeric(datos_test[[col]])
 }
 
-# Predicción con XGB
+# Predicción con el punto de corte correspondiente
 probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"1"]
 pred_submission <- ifelse(probs_submission > 0.320,"Yes", "No")
 
-# Crear submission
 submission <- data.frame(
   ID = id_test,
   Exited = pred_submission
@@ -388,7 +386,5 @@ submission <- data.frame(
 submission
 
 write.csv(submission, "Boosting_XGB_SMOTE_0.320.csv", row.names = FALSE)
-
-
 ```
 

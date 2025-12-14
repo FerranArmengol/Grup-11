@@ -19,6 +19,7 @@ library(ROSE)
 library(DMwR2)  
 library(smotefamily)
 ```
+
 ```{r}
 data<-read.csv("datos_missing.csv")
 data <- data %>%
@@ -67,7 +68,7 @@ test  <- fix_types(test)
 train$Exited <- factor(train$Exited, levels = c("0","1"))
 test$Exited  <- factor(test$Exited,  levels = c("0","1"))
 
-# Asegurarnos que Exited tenga niveles "0" y "1" en ese orden
+# Asegurarnos que Exited tenga niveles "0" y "1" 
 train$Exited <- factor(train$Exited, levels = c("0","1"))
 test$Exited  <- factor(test$Exited,  levels = c("0","1"))
 set.seed(1234)
@@ -146,8 +147,6 @@ eval_cutoffs_smote <- function(prob_vec, test_labels, cutoffs = seq(0.1, 0.9, by
 
 ```
 
-
-
 ```{r}
 res_log_original <- eval_cutoffs(models_original$logit, test)
 res_log_under    <- eval_cutoffs(models_under$logit, test)
@@ -158,7 +157,6 @@ pred_prob_smote1 <- predict(model_logit_smote, newdata = test, type = "prob")[, 
 res_logit_smote    <- eval_cutoffs_smote(pred_prob_smote, test$Exited)
 ```
 
-
 ```{r}
 res_probit_original <- eval_cutoffs(models_original$probit, test)
 res_probit_under    <- eval_cutoffs(models_under$probit, test)
@@ -168,9 +166,4 @@ res_probit_rose     <- eval_cutoffs(models_rose$probit, test)
 pred_prob_smote2 <- predict(model_probit_smote, newdata = test, type = "prob")[, "1"]
 res_probit_smote    <- eval_cutoffs_smote(pred_prob_smote2, test$Exited)
 ```
-
-
-
-
-
 
