@@ -25,7 +25,7 @@ library(DMwR2)
 mydata <- read.csv("C:/Users/usuario/Downloads/datos_relevantes_Train_Decision1.csv") 
 
 
-mydata <- mydata %>%
+mydata <- mydata  %>% select(-ID) %>%
   mutate(across(where(is.character), as.factor)) %>%
   mutate(across(where(~ is.numeric(.) && n_distinct(.) < 20), as.factor))
 
@@ -207,7 +207,7 @@ submission <- data.frame(
 
 submission
 
-write.csv(submission, "Boosting_GBM_Over_0.545_Decision1.csv", row.names = FALSE)
+#write.csv(submission, "Boosting_GBM_Over_0.545_Decision1.csv", row.names = FALSE)
 ```
 
 ## GBM SMOTE
@@ -251,6 +251,14 @@ print(results)
 
 ## Modelo 1 (sin balancear)
 ```{r}
+xgb_grid <- expand.grid(nrounds = c(200, 300, 400),        
+  max_depth = c(2,4, 6),         
+  eta = c(0.04, 0.01, 0.05),            
+  gamma = 0,
+  colsample_bytree = c(0.8),
+  min_child_weight = c(1, 3),     
+  subsample = 0.8)
+
 modelLookup("xgbTree")
 
 set.seed(123)
@@ -258,18 +266,18 @@ caret.xgb <- train(
 Exited ~ ., data = train,
 method = "xgbTree",
 trControl = trControl,
-verbosity = 0)
+verbosity = 0, tuneGrid=xgb_grid)
 
 caret.xgb$bestTune
 
 pred_xgb <- predict(caret.xgb, newdata = test)
-probs_xgb <- predict(caret.xgb, test, type="prob")[ , "1"]
+probs_xgb <- predict(caret.xgb, test, type="prob")[ , "Class1"]
 cutoffs <- seq(0.1, 0.9, by = 0.005)
 results <- data.frame(cutoff = numeric(), accuracy=numeric(), recall = numeric(), f1 = numeric())
 
 
 for (c in cutoffs) {
-  pred_corte_test <- factor(ifelse(probs_xgb > c, "1", "0"), levels = levels(test$Exited))
+  pred_corte_test <- factor(ifelse(probs_xgb > c, "Class1", "Class0"), levels = levels(test$Exited))
   
 t2<-table(pred_corte_test, test$Exited)
 t2
@@ -292,6 +300,13 @@ print(results)
 
 ## Modelo 2 (balanceo)
 ```{r}
+xgb_grid <- expand.grid(nrounds = c(200, 300, 400),        
+  max_depth = c(2,4, 6),        
+  eta = c(0.04, 0.01, 0.05),            
+  gamma = 0,
+  colsample_bytree = c(0.8),
+  min_child_weight = c(1, 3),    
+  subsample = 0.8)
 
 ctrl_basic <- trainControl(method = "cv", number = 5, classProbs = TRUE)
 cutoffs <- seq(0.1, 0.9, by = 0.005)
@@ -330,7 +345,7 @@ for(balance_name in balance_types){
     Exited ~ ., data = train_data,
     method = "xgbTree",
     trControl = ctrl,
-    verbosity = 0
+    verbosity = 0, tuneGrid=xgb_grid
   )
   
   probs <- predict(model, newdata = test, type = "prob")[, "Class1"]
@@ -363,12 +378,20 @@ results
 ## Modelo 3 (SMOTE)
 
 ```{r}
+xgb_grid <- expand.grid(nrounds = c(200, 300, 400),        
+  max_depth = c(2,4, 6),         
+  eta = c(0.04, 0.01, 0.05),            
+  gamma = 0,
+  colsample_bytree = c(0.8),
+  min_child_weight = c(1, 3),     
+  subsample = 0.8)
+
 ctrl_SMOTE <- trainControl(method = "repeatedcv", number = 5, sampling = "smote")
 set.seed(123)
 modelo_smote3 <-caret::train(Exited ~ .,
                          data = train,
                          method = "xgbTree",
-                         trControl = ctrl_SMOTE)
+                         trControl = ctrl_SMOTE,tuneGrid=xgb_grid)
 probs <- predict(modelo_smote3, newdata = test, type = "prob")[, "Class1"]
 
 cutoffs <- seq(0.1, 0.9, by = 0.005)
@@ -427,7 +450,7 @@ for (col in setdiff(names(datos_test), factor_cols)) {
 
 # Predicción con XGB
 probs_submission <- predict(caret.xgb, newdata = datos_test, type = "prob")[,"1"]
-pred_submission <- ifelse(probs_submission > 0.245,"Yes", "No")
+pred_submission <- ifelse(probs_submission > 0.240,"Yes", "No")
 
 # Crear submission
 submission <- data.frame(
@@ -437,7 +460,7 @@ submission <- data.frame(
 
 submission
 
-#write.csv(submission, "Boosting_XGB_sinBalanceo_0.245_Relev.csv", row.names = FALSE)
+#write.csv(submission, "Boosting_XGB_sinBalanceo_0.240_Decision1.csv", row.names = FALSE)
 
 ```
 
