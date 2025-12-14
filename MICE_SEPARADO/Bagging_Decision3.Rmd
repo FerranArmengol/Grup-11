@@ -27,6 +27,8 @@ set.seed(1234)
 ind <- sample(1:nrow(mydata), 0.7*nrow(mydata))
 train <- mydata[ind,]
 test <- mydata[-ind,]
+train <- train %>% select(-ID)
+test <- test %>% select(-ID)
 ```
 
 # Bagging clásico: mtry=p
@@ -295,7 +297,7 @@ set.seed(1234)
 modelo_base3 <- caret::train(Exited ~ .,
                          data = train,
                          method = "rf",
-                         trControl = ctrl_default,tuneGrid=tuneGrid,ntree=500)
+                         trControl = ctrl_default,tuneGrid=tuneGrid,ntree=1)
 
 # =============================================================================
 # 2. OVERSAMPLING
@@ -305,7 +307,7 @@ set.seed(1234)
 modelo_over3 <- caret::train(Exited ~ .,
                          data = train,
                          method = "rf",
-                         trControl = ctrl_up,tuneGrid=tuneGrid,ntree=500)
+                         trControl = ctrl_up,tuneGrid=tuneGrid,ntree=1)
 
 
 # =============================================================================
@@ -316,7 +318,7 @@ set.seed(1234)
 modelo_under3 <- caret::train(Exited ~ .,
                          data = train,
                          method = "rf",
-                         trControl = ctrl_down,tuneGrid=tuneGrid,ntree=500)
+                         trControl = ctrl_down,tuneGrid=tuneGrid,ntree=1)
 
 
 # =============================================================================
@@ -378,24 +380,23 @@ comparacion
 
 ```{r}
 # SMOTE
-mydata<-read.csv("datos_relevantes.csv")
-datos_test <- mydata %>% filter(is.na(Exited))
-datos_test$Exited <- factor(datos_test$Exited, levels = c(0,1), labels = c("0","1"))
+datos_test<-read.csv("datos_relevantes_Test.csv")
+id_test <- datos_test$ID
+datos_test <- datos_test %>% select(-ID)
 
 # Predicciones probabilísticas con SMOTE
 probs_smote_test <- predict(modelo_smote3, newdata = datos_test, type = "prob")[, "1"]
-
 # Aplicar punto de corte 0.2
 pred_smote_test <- ifelse(probs_smote_test > 0.230	, "Yes", "No")
 
 # Generar dataframe final para submission
 submission_smote <- data.frame(
-  ID = datos_test$ID,
+  ID = id_test,
   Exited = pred_smote_test
 )
 
 # Guardar CSV
-#write.csv(submission_smote, "bagging_smote_0.230.csv", row.names = FALSE)
+write.csv(submission_smote, "bagging_smote_0.230_decision3.csv", row.names = FALSE)
 
 ```
 
