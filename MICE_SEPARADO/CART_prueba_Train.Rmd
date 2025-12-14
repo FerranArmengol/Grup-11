@@ -1,0 +1,261 @@
+---
+title: "CART"
+output: html_document
+date: "2025-11-18"
+---
+
+```{r}
+library(DAAG)
+library(party)
+library(rpart)
+library(rpart.plot)
+library(mlbench)
+library(caret)
+library(pROC)
+library(tree)
+library(C50)
+library(printr)
+library(dplyr)
+```
+
+# Lectura de datos (base de datos completa)
+```{r}
+mydata<-read.csv("C:/Users/Armengol/Downloads/datos_missing_train.csv")
+mydata <- mydata %>%
+  filter(!is.na(Exited))  %>%
+  select(-ID)
+mydata$Exited<-factor(mydata$Exited)
+set.seed(1234)
+ind <- sample(1:nrow(mydata), 0.7*nrow(mydata))
+train <- mydata[ind,]
+test <- mydata[-ind,]
+```
+
+# Tree Classification
+```{r}
+tree <- rpart(Exited ~., data = train)
+tree
+summary(tree)
+windows()
+rpart.plot(tree)
+rpart.plot(tree,type=0)
+rpart.plot(tree,type=1)
+rpart.plot(tree,type=2)
+rpart.plot(tree,type=5)
+prp(tree, type=1)
+
+rpart.rules(tree, style = "tall")
+tree$variable.importance
+```
+
+## Estrategia 1: cp=0. Sin balanceo
+
+```{r}
+tree <- rpart(Exited ~ ., data = train, cp = 0) ###Best strategy for tree fitting
+printcp(tree)
+#Buscar cp con menor xerror
+plotcp(tree)
+xerror <- tree$cptable[,"xerror"]
+xerror
+imin.xerror <- which.min(xerror)
+imin.xerror
+tree$cptable[imin.xerror, ]
+upper.xerror <- xerror[imin.xerror] + tree$cptable[imin.xerror, "xstd"]
+upper.xerror
+tree <- prune(tree, cp =  0.003331053) 
+rpart.plot(tree)
+
+######NOTE:###You can change the cp value according to your data set.
+###Please note lower cp value means a bigger the tree. If you are using too lower cp, tree probably leads to overfitting.
+####Checking results
+
+importance <- tree$variable.importance 
+importance <- round(100*importance/sum(importance), 1)
+importance
+
+```
+
+```{r}
+
+p_est <- mean(mydata$Exited == 1)
+
+p <- predict(tree, train, type = "class")
+prob_train <- predict(tree, newdata = train, type = "prob")[, "1"]
+pred_corte_train <- ifelse(prob_train > p_est, "1", "0")
+pred_corte_train <- factor(pred_corte_train, levels = levels(test$Exited))
+cm_train<-confusionMatrix(pred_corte_train, train$Exited, positive="1")
+
+# Extraemos la Precision y el Recall
+precision_train <- cm_train$byClass["Precision"]
+recall_train <- cm_train$byClass["Recall"]
+
+# Calcular F1
+F1_train <- 2 * (precision_train * recall_train) / (precision_train + recall_train)
+F1_train
+
+p2 <- predict(tree, test, type = 'class')
+prob_test <- predict(tree, newdata = test, type = "prob")[, "1"]
+pred_corte_test <- ifelse(prob_test > p_est, "1", "0")
+pred_corte_test <- factor(pred_corte_test, levels = levels(test$Exited))
+cm_test<-confusionMatrix(pred_corte_test, test$Exited, positive="1")
+precision_test <- cm_test$byClass["Precision"]
+recall_test <- cm_test$byClass["Recall"]
+
+F1_test <- 2 * (precision_test * recall_test) / (precision_test + recall_test)
+F1_test
+```
+
+## ROC Curve
+
+```{r}
+p1 <- predict(tree, test, type = 'prob')
+head(p1)
+p1 <- p1[,2]
+r <- multiclass.roc(test$Exited, p1, percent = TRUE)
+roc <- r[['rocs']]
+r1 <- roc[[1]]
+plot.roc(r1,print.auc=TRUE,
+         auc.polygon=TRUE,
+         grid=c(0.1, 0.2),
+         grid.col=c("green", "red"),
+         max.auc.polygon=TRUE,
+         auc.polygon.col="lightblue",
+         print.thres=TRUE,
+         main= 'ROC Curve')
+obs <- test$Exited
+caret::postResample(p2, obs)
+```
+
+## Estrategia 2 (usando Caret)
+```{r}
+caret.rpart <- train(Exited ~ ., method = "rpart", data = train, 
+                     tuneLength = 20,
+                     trControl = trainControl(method = "cv", number = 10)) 
+ggplot(caret.rpart)
+rpart.plot(caret.rpart$finalModel)
+
+caret.rpart <- train(Exited ~ ., method = "rpart", data = train, 
+                     tuneLength = 20,
+                     trControl = trainControl(method = "cv", number = 10,
+                                              selectionFunction = "oneSE")) 
+rpart.plot(caret.rpart$finalModel)
+var.imp <- varImp(caret.rpart)
+plot(var.imp)
+pred <- predict(caret.rpart, newdata = train)
+confusionMatrix(pred, train$Exited, positive="1")
+pred1 <- predict(caret.rpart, newdata = test)
+confusionMatrix(pred1, test$Exited, positive="1")
+```
+## Estrategia 1 Mejorada: cp=0 
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(ROSE)
+library(dplyr)
+
+# 1. Preparamos datos 
+mydata <- read.csv("datos_missing.csv")
+mydata <- mydata %>%
+  filter(!is.na(Exited)) %>%
+  select(-ID)
+mydata$Exited <- factor(mydata$Exited)
+
+set.seed(1234)
+ind <- sample(1:nrow(mydata), 0.71*nrow(mydata))
+train <- mydata[ind, ]
+test  <- mydata[-ind, ]
+
+p_est <- mean(mydata$Exited == 1) 
+
+# 2. Función para entrenar árbol y calcular F1
+train_and_evaluate <- function(train_data, test_data, cp_prune = 0.0033) {
+  tree <- rpart(Exited ~ ., data = train_data, cp = 0)
+  xerror <- tree$cptable[,"xerror"]
+  imin.xerror <- which.min(xerror)
+  tree <- prune(tree, cp = cp_prune)
+  
+  # Importancia
+  importance <- tree$variable.importance
+  importance <- round(100*importance/sum(importance), 1)
+  
+  # Predicciones train
+  prob_train <- predict(tree, newdata = train_data, type = "prob")[, "1"]
+  pred_train <- factor(ifelse(prob_train > 0.5, "1", "0"), levels = levels(test_data$Exited))
+  cm_train <- confusionMatrix(pred_train, train_data$Exited, positive = "1")
+  precision_train <- cm_train$byClass["Precision"]
+  recall_train <- cm_train$byClass["Recall"]
+  F1_train <- 2 * (precision_train * recall_train) / (precision_train + recall_train)
+  
+  # Predicciones test
+  prob_test <- predict(tree, newdata = test_data, type = "prob")[, "1"]
+  pred_test <- factor(ifelse(prob_test > 0.5, "1", "0"), levels = levels(test_data$Exited))
+  cm_test <- confusionMatrix(pred_test, test_data$Exited, positive = "1")
+  precision_test <- cm_test$byClass["Precision"]
+  recall_test <- cm_test$byClass["Recall"]
+  F1_test <- 2 * (precision_test * recall_test) / (precision_test + recall_test)
+  
+  return(list(tree = tree,
+              importance = importance,
+              F1_train = F1_train,
+              F1_test = F1_test))
+}
+
+
+# 3a. Oversampling 
+train_over <- upSample(x = train[, setdiff(names(train), "Exited")],
+                       y = train$Exited,
+                       yname = "Exited")
+res_over <- train_and_evaluate(train_over, test)
+
+# 3b. Undersampling
+train_under <- downSample(x = train[, setdiff(names(train), "Exited")],
+                          y = train$Exited,
+                          yname = "Exited")
+res_under <- train_and_evaluate(train_under, test)
+
+
+# 4. Comparar F1-test
+f1_results <- data.frame(
+  Method = c("Original", "Oversampling", "Undersampling"),
+  F1_test = c(
+   train_and_evaluate(train,test)$F1_test,
+    res_over$F1_test,
+    res_under$F1_test  )
+)
+print(f1_results)
+
+```
+
+## Predicción Final
+```{r}
+library(rpart)
+library(rpart.plot)
+library(dplyr)
+library(caret)
+library(ROSE)
+
+datos <- read.csv("datos_missing.csv")
+datos_test <- datos %>% filter(is.na(Exited))
+datos_test$Exited <- factor(datos_test$Exited)
+
+train_over <- upSample(x = mydata[, setdiff(names(mydata), "Exited")],
+                       y = mydata$Exited,
+                       yname = "Exited")
+
+tree_final <- rpart(Exited ~ ., data = train_over, cp = 0)
+tree_final <- prune(tree_final, cp = 0.0033)
+
+# Predicciones en test final con punto de corte
+probs_cart_final <- predict(tree_final, newdata = datos_test, type = "prob")[, "1"]
+pred_cart_final_corte <- ifelse(probs_cart_final > 0.5, "1", "0")
+
+
+pred_test_final_cart <- ifelse(pred_cart_final_corte == "0", "No", "Yes")
+
+
+resultado_cart_corte <- data.frame(ID = datos_test$ID, Exited = pred_test_final_cart)
+write.csv(resultado_cart_corte, "resultado_cart_corte.csv", row.names = FALSE)
+```
+

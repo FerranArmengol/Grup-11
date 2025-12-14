@@ -1,0 +1,169 @@
+---
+title: "Modelo Logístico"
+author: "Grupo 11"
+date: "2025-12-08"
+output: html_document
+---
+
+# Lectura de los datos
+```{r}
+library(car)
+library(randomForest)
+library(caret)
+library(vip)
+library(glmnet)
+library(dplyr)
+library(tidyverse)
+library(pROC)
+library(ROSE)
+library(DMwR2)  
+library(smotefamily)
+```
+
+```{r}
+data<-read.csv("C:/Users/Armengol/Downloads/datos_missing_train.csv")
+data <- data %>%
+  filter(!is.na(Exited))  %>%
+  select(-ID)
+data$Exited <- as.factor(data$Exited)
+set.seed(1234)
+ind <- sample(1:nrow(data), 0.7*nrow(data))
+train <- data[ind,]
+test <- data[-ind,]
+```
+
+# Balanceo
+```{r}
+formula_logit <- Exited ~ Age + EstimatedSalary + Gender + Geography + IsActiveMember + Balance
+formula_probit <- Exited ~ Age + EstimatedSalary + Gender + Geography + IsActiveMember + Balance + HasCrCard
+
+#Under
+set.seed(1234)
+train_under <- ovun.sample(Exited ~ ., data = train, method = "under")$data
+table(train_under$Exited)
+
+#Over
+set.seed(1234)
+train_over <- ovun.sample(Exited ~ ., data = train, method = "over")$data
+table(train_over$Exited)
+
+#ROSE
+set.seed(1234)
+train_rose_ready <- train %>% 
+  mutate(across(where(is.character), as.factor),
+         across(where(is.logical), as.factor))
+
+train_rose <- ROSE(Exited ~ ., data = train_rose_ready, seed = 1234)$data
+table(train_rose$Exited)
+
+#SMOTE
+fix_types <- function(df){
+  df <- df %>% mutate(across(where(is.ordered), as.factor))
+  df <- df %>% mutate(across(where(is.logical), ~as.factor(as.character(.))))
+  return(df)
+}
+
+train <- fix_types(train)
+test  <- fix_types(test)
+train$Exited <- factor(train$Exited, levels = c("0","1"))
+test$Exited  <- factor(test$Exited,  levels = c("0","1"))
+
+# Asegurarnos que Exited tenga niveles "0" y "1" 
+train$Exited <- factor(train$Exited, levels = c("0","1"))
+test$Exited  <- factor(test$Exited,  levels = c("0","1"))
+set.seed(1234)
+ctrl_smote <- trainControl(method = "repeatedcv", number = 10, repeats = 10,sampling = "smote")
+model_logit_smote <- train(formula_logit,data = train,method = "glm",family = binomial(link = "logit"),trControl = ctrl_smote)
+model_probit_smote <- train(formula_probit,data = train,method = "glm",family = binomial(link = "probit"),trControl = ctrl_smote)
+
+```
+
+# Modelado
+```{r}
+train_models <- function(df){
+  model_log_sig <- glm(formula_logit, data = df, family = binomial(link="logit"))
+  model_probit_sig <- glm(formula_probit, data = df, family = binomial(link="probit"))
+  list(logit = model_log_sig, probit = model_probit_sig)
+}
+```
+
+```{r}
+models_original <- train_models(train)
+models_under    <- train_models(train_under)
+models_over     <- train_models(train_over)
+models_rose     <- train_models(train_rose)
+```
+
+```{r}
+eval_cutoffs <- function(model, test){
+  
+  pred_prob <- predict(model, test, type = "response")
+  
+  cutoffs <- seq(0.1, 0.9, by = 0.005)
+  results <- data.frame()
+  
+  for(cut in cutoffs){
+    
+    pred <- factor(ifelse(pred_prob > cut, "1","0"),
+                   levels = levels(test$Exited))
+    
+    cm <- confusionMatrix(pred, test$Exited, positive = "1")
+    
+    precision <- cm$byClass["Pos Pred Value"]
+    recall <- cm$byClass["Sensitivity"]
+    F1 <- 2 * (precision * recall) / (precision + recall)
+    
+    results <- rbind(
+      results,
+      data.frame(
+        Cutoff = cut,
+        Accuracy = cm$overall["Accuracy"],
+        Recall = recall,
+        F1 = F1
+      )
+    )
+  }
+  return(results)
+}
+eval_cutoffs_smote <- function(prob_vec, test_labels, cutoffs = seq(0.1, 0.9, by = 0.005)){
+  results <- data.frame()
+  for(cut in cutoffs){
+    pred <- factor(ifelse(prob_vec > cut, "1", "0"), levels = levels(test_labels))
+    cm <- caret::confusionMatrix(pred, test_labels, positive = "1")
+    precision <- as.numeric(cm$byClass["Pos Pred Value"])
+    recall    <- as.numeric(cm$byClass["Sensitivity"])
+    if(is.na(precision) | is.na(recall) | (precision + recall) == 0){
+      F1 <- NA
+    } else {
+      F1 <- 2 * (precision * recall) / (precision + recall)
+    }
+    results <- rbind(results, data.frame(Cutoff = cut,
+                                         Accuracy = as.numeric(cm$overall["Accuracy"]),
+                                         Recall = recall,
+                                         F1 = F1))
+  }
+  return(results)
+}
+
+```
+
+```{r}
+res_log_original <- eval_cutoffs(models_original$logit, test)
+res_log_under    <- eval_cutoffs(models_under$logit, test)
+res_log_over     <- eval_cutoffs(models_over$logit, test)
+res_log_rose     <- eval_cutoffs(models_rose$logit, test)
+
+pred_prob_smote <- predict(model_logit_smote, newdata = test, type = "prob")[, "1"]
+res_logit_smote    <- eval_cutoffs_smote(pred_prob_smote, test$Exited)
+```
+
+```{r}
+res_probit_original <- eval_cutoffs(models_original$probit, test)
+res_probit_under    <- eval_cutoffs(models_under$probit, test)
+res_probit_over     <- eval_cutoffs(models_over$probit, test)
+res_probit_rose     <- eval_cutoffs(models_rose$probit, test)
+
+pred_prob_smote2 <- predict(model_probit_smote, newdata = test, type = "prob")[, "1"]
+res_probit_smote    <- eval_cutoffs_smote(pred_prob_smote2, test$Exited)
+```
+
