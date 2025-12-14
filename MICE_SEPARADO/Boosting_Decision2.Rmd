@@ -1,0 +1,443 @@
+---
+title: "Boosting"
+author: "Grupo 11"
+date: "2025-12-01"
+output: pdf_document
+---
+
+
+# Preparación de los datos
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(caret)
+library(gbm)
+library(xgboost)
+library(dplyr)
+library(pROC)
+library(ROSE)
+library(smotefamily)
+library(DMwR2) 
+```
+```{r}
+mydata <- read.csv("datos_relevantes_Train_Decision2.csv") 
+
+
+mydata <- mydata %>%
+  mutate(across(where(is.character), as.factor)) %>%
+  mutate(across(where(~ is.numeric(.) && n_distinct(.) < 20), as.factor))
+
+mydata$Exited <- factor(mydata$Exited)
+
+
+set.seed(1234)
+ind <- sample(1:nrow(mydata), 0.6 * nrow(mydata))
+
+train <- mydata[ind, ]
+factor_cols <- names(train)[sapply(train, is.factor)]
+test <- mydata[-ind, ]
+```
+```{r}
+# F1 score
+
+F1 <- function(cm) {
+p <- cm$byClass["Precision"]
+r <- cm$byClass["Recall"]
+2*p*r/(p+r)
+}
+
+# Ajustar punto de corte
+
+threshold_eval <- function(probs, true){
+cortes <- seq(0.1, 0.9, 0.01)
+f1s <- recalls <- numeric(length(cortes))
+
+for(i in 1:length(cortes)){
+pred <- ifelse(probs > cortes[i], "1","0")
+cm <- confusionMatrix(factor(pred, levels=levels(true)), true, positive="1")
+f1s[i] <- F1(cm)
+recalls[i] <- cm$byClass["Recall"]
+}
+
+data.frame(threshold=cortes, F1=f1s, Recall=recalls)
+}
+
+```
+
+```{r}
+### OVERSAMPLING
+train_over <- upSample(
+  train[, -which(names(train)=="Exited")],
+  train$Exited, yname="Exited"
+)
+
+### UNDERSAMPLING
+train_under <- downSample(
+  train[, -which(names(train)=="Exited")],
+  train$Exited, yname="Exited"
+)
+
+### ROSE
+
+bad_cols <- sapply(train, function(x) !is.numeric(x) && !is.factor(x))
+
+train_fixed <- train %>%
+  mutate(across(which(bad_cols), as.factor))
+
+train_fixed <- train_fixed %>%
+  mutate(across(where(~ is.numeric(.) && n_distinct(.) <= 20), as.factor))
+
+train_rose <- ROSE(Exited ~ ., data=train_fixed, seed=1234)$data
+
+```
+
+# GBM
+
+```{r}
+trControl <- trainControl(method="cv", number=5,repeats=2)
+
+datasets <- list(Original = train,Oversampling = train_over,Undersampling = train_under,ROSE = train_rose)
+
+
+gbm_models <- list()
+gbm_results <- data.frame()
+
+for(name in names(datasets)){
+
+set.seed(123)
+model <- train(
+Exited ~ ., data=datasets[[name]],
+method="gbm",
+trControl=trControl,
+verbose=FALSE
+)
+
+pred_class <- predict(model, newdata=test)
+pred_prob <- predict(model, newdata=test, type="prob")[,"1"]
+cm <- confusionMatrix(pred_class, test$Exited, positive="1")
+
+gbm_models[[name]] <- model
+
+gbm_results <- rbind(gbm_results, data.frame(
+Dataset=name,
+Accuracy=cm$overall["Accuracy"],
+Recall=cm$byClass["Recall"],
+F1=F1(cm)
+))
+}
+
+gbm_results
+
+best_model_name <- gbm_results$Dataset[which.max(gbm_results$F1)]
+best_gbm <- gbm_models[[best_model_name]]
+
+probs_best <- predict(best_gbm, test, type="prob")[ , "1"]
+
+eval <- threshold_eval(probs_best, test$Exited)
+
+best_cut <- eval$threshold[ which.max(eval$F1) ]
+best_cut
+
+pred_cut <- ifelse(probs_best > best_cut, "1","0")
+cm_cut <- confusionMatrix(factor(pred_cut, levels=levels(test$Exited)),
+test$Exited, positive="1")
+cm_cut
+Accuracy<-cm_cut$overall["Accuracy"]
+Recall<-cm_cut$byClass["Recall"]
+precision <- cm_cut$byClass["Pos Pred Value"]
+F1 <- F1(cm_cut)
+
+
+
+cutoffs <- seq(0.1, 0.9, by = 0.005)
+results <- data.frame(cutoff = numeric(), accuracy=numeric(), recall = numeric(), f1 = numeric())
+
+for (c in cutoffs) {
+  pred_corte_test <- factor(ifelse(probs_best > c, "1", "0"), levels = levels(test$Exited))
+  
+t2<-table(pred_corte_test, test$Exited)
+t2
+TP <- t2[2,2]
+TN <- t2[1,1]
+FP <- t2[2,1]
+FN <- t2[1,2]
+
+recall <- TP / (TP + FN)
+precision <- TP / (TP + FP)
+f1 <- 2 * (precision * recall) / (precision + recall)
+n<-nrow(test)
+accuracy2<-(sum(diag(t2))/n)
+accuracy2
+
+results <- rbind(results, data.frame(cutoff = c, accuracy=accuracy2, recall = recall, f1 = f1))
+}
+print(results)
+```
+
+```{r}
+datos_test <- read.csv("datos_relevantes_Test.csv")
+
+id_test <- datos_test$ID
+
+
+# --- MUY IMPORTANTE ---
+# 1. Convertir las columnas factor al mismo tipo
+for (col in factor_cols) {
+  if (col %in% names(datos_test)) {
+    datos_test[[col]] <- as.factor(datos_test[[col]])
+  }
+}
+
+# 2. Convertir todo lo demás a numérico
+for (col in setdiff(names(datos_test), factor_cols)) {
+  datos_test[[col]] <- as.numeric(datos_test[[col]])
+}
+
+# Predicción con GBM
+probs_submission <- predict(best_gbm, newdata = datos_test, type = "prob")[,"1"]
+pred_submission <- ifelse(probs_submission > 0.545,"Yes", "No")
+
+# Crear submission
+submission <- data.frame(
+  ID = id_test,
+  Exited = pred_submission
+)
+
+submission
+
+#write.csv(submission, "Boosting_GBM_Over_0.545_Decision1.csv", row.names = FALSE)
+```
+
+## GBM SMOTE
+```{r}
+trControl2 <- trainControl(method="cv", number=5,sampling="smote")
+
+set.seed(123)
+gbmFit1 <- train(Exited ~ ., data = train, 
+                 method = "gbm", 
+                 trControl = trControl2,
+                 verbose = FALSE)
+
+
+cutoffs <- seq(0.1, 0.9, by = 0.005)
+results <- data.frame(cutoff = numeric(), accuracy=numeric(), recall = numeric(), f1 = numeric())
+
+probs_gbm_smote <- predict(gbmFit1, newdata=test, type="prob")[,"1"]
+for (c in cutoffs) {
+  pred_corte_test <- factor(ifelse(probs_gbm_smote > c, "1", "0"), levels = levels(test$Exited))
+  
+t2<-table(pred_corte_test, test$Exited)
+t2
+TP <- t2[2,2]
+TN <- t2[1,1]
+FP <- t2[2,1]
+FN <- t2[1,2]
+
+recall <- TP / (TP + FN)
+precision <- TP / (TP + FP)
+f1 <- 2 * (precision * recall) / (precision + recall)
+n<-nrow(test)
+accuracy2<-(sum(diag(t2))/n)
+accuracy2
+
+results <- rbind(results, data.frame(cutoff = c, accuracy=accuracy2, recall = recall, f1 = f1))
+}
+print(results)
+```
+
+# XGBoost
+
+## Modelo 1 (sin balancear)
+```{r}
+modelLookup("xgbTree")
+
+set.seed(123)
+caret.xgb <- train(
+Exited ~ ., data = train,
+method = "xgbTree",
+trControl = trControl,
+verbosity = 0)
+
+caret.xgb$bestTune
+
+pred_xgb <- predict(caret.xgb, newdata = test)
+probs_xgb <- predict(caret.xgb, test, type="prob")[ , "1"]
+cutoffs <- seq(0.1, 0.9, by = 0.005)
+results <- data.frame(cutoff = numeric(), accuracy=numeric(), recall = numeric(), f1 = numeric())
+
+
+for (c in cutoffs) {
+  pred_corte_test <- factor(ifelse(probs_xgb > c, "1", "0"), levels = levels(test$Exited))
+  
+t2<-table(pred_corte_test, test$Exited)
+t2
+TP <- t2[2,2]
+TN <- t2[1,1]
+FP <- t2[2,1]
+FN <- t2[1,2]
+
+recall <- TP / (TP + FN)
+precision <- TP / (TP + FP)
+f1 <- 2 * (precision * recall) / (precision + recall)
+n<-nrow(test)
+accuracy2<-(sum(diag(t2))/n)
+accuracy2
+
+results <- rbind(results, data.frame(cutoff = c, accuracy=accuracy2, recall = recall, f1 = f1))
+}
+print(results)
+```
+
+## Modelo 2 (balanceo)
+```{r}
+
+ctrl_basic <- trainControl(method = "cv", number = 5, classProbs = TRUE)
+cutoffs <- seq(0.1, 0.9, by = 0.005)
+results <- data.frame()
+
+balance_types <- c("None", "Oversampling", "Undersampling", "ROSE", "Both")
+
+train$Exited <- factor(ifelse(train$Exited == "1", "Class1", "Class0"))
+test$Exited  <- factor(ifelse(test$Exited == "1", "Class1", "Class0"))
+
+
+for(balance_name in balance_types){
+  
+  cat("Procesando balanceo:", balance_name, "\n")
+  
+  if(balance_name == "None"){
+    train_data <- train
+    ctrl <- ctrl_basic
+  } else if(balance_name == "Oversampling"){
+    train_data <- train
+    ctrl <- trainControl(method="cv", number=5, sampling="up", classProbs = TRUE)
+  } else if(balance_name == "Undersampling"){
+    train_data <- train
+    ctrl <- trainControl(method="cv", number=5, sampling="down", classProbs = TRUE)
+  } else if(balance_name == "ROSE"){
+    train_data <- ROSE(Exited ~ ., data = train, seed = 1)$data
+    ctrl <- ctrl_basic
+  } else if(balance_name == "Both"){
+    train_data <- ovun.sample(Exited ~ ., data = train, method = "both", p=0.5, N=1000, seed = 1)$data
+    ctrl <- ctrl_basic
+  }
+  
+
+  set.seed(123)
+  model <- train(
+    Exited ~ ., data = train_data,
+    method = "xgbTree",
+    trControl = ctrl,
+    verbosity = 0
+  )
+  
+  probs <- predict(model, newdata = test, type = "prob")[, "Class1"]
+  
+
+  for(cut in cutoffs){
+    pred <- factor(ifelse(probs > cut, "Class1", "Class0"), levels = levels(test$Exited))
+    cm <- confusionMatrix(pred, test$Exited, positive = "Class1")
+    
+    precision <- cm$byClass["Pos Pred Value"]
+    recall <- cm$byClass["Sensitivity"]
+    F1 <- 2 * (precision * recall) / (precision + recall)
+    
+    results <- rbind(
+      results,
+      data.frame(
+        Balance = balance_name,
+        Cutoff = cut,
+        Accuracy = cm$overall["Accuracy"],
+        Recall = recall,
+        F1 = F1
+      )
+    )
+  }
+}
+
+results
+```
+
+## Modelo 3 (SMOTE)
+
+```{r}
+ctrl_SMOTE <- trainControl(method = "repeatedcv", number = 5, sampling = "smote")
+set.seed(123)
+modelo_smote3 <-caret::train(Exited ~ .,
+                         data = train,
+                         method = "xgbTree",
+                         trControl = ctrl_SMOTE)
+probs <- predict(modelo_smote3, newdata = test, type = "prob")[, "Class1"]
+
+cutoffs <- seq(0.1, 0.9, by = 0.005)
+results_smote <- data.frame()
+
+for(cut in cutoffs){
+  
+  pred <- factor(ifelse(probs > cut, "Class1", "Class0"), levels = levels(test$Exited))
+  cm <- confusionMatrix(pred, test$Exited, positive = "Class1")
+  
+  precision <- cm$byClass["Pos Pred Value"]
+  recall <- cm$byClass["Sensitivity"]
+  F1 <- 2 * (precision * recall) / (precision + recall)
+  
+  results_smote <- rbind(
+    results_smote,
+    data.frame(
+      Balance = "SMOTE",
+      Cutoff = cut,
+      Accuracy = cm$overall["Accuracy"],
+      Recall = recall,
+      F1 = F1
+    )
+  )
+}
+
+results_smote
+```
+
+# Predicción final
+
+```{r}
+# Cargar datos completos
+datos_test <- read.csv("datos_relevantes_Test.csv")
+
+
+# Guardar ID
+id_test <- datos_test$ID
+
+# Eliminar columnas no usadas por el modelo
+datos_test <- datos_test %>% select(-ID)
+
+# --- MUY IMPORTANTE ---
+# Aplicar EXACTAMENTE el mismo preprocesado que train
+# 1. Convertir las columnas factor al mismo tipo
+for (col in factor_cols) {
+  if (col %in% names(datos_test)) {
+    datos_test[[col]] <- as.factor(datos_test[[col]])
+  }
+}
+
+# 2. Convertir todo lo demás a numérico
+for (col in setdiff(names(datos_test), factor_cols)) {
+  datos_test[[col]] <- as.numeric(datos_test[[col]])
+}
+
+# Predicción con XGB
+probs_submission <- predict(caret.xgb, newdata = datos_test, type = "prob")[,"1"]
+pred_submission <- ifelse(probs_submission > 0.245,"Yes", "No")
+
+# Crear submission
+submission <- data.frame(
+  ID = id_test,
+  Exited = pred_submission
+)
+
+submission
+
+#write.csv(submission, "Boosting_XGB_sinBalanceo_0.245_Relev.csv", row.names = FALSE)
+
+```
+
