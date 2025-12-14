@@ -31,6 +31,7 @@ ind <- sample(1:nrow(mydata), 0.7*nrow(mydata))
 train <- mydata[ind,]
 test <- mydata[-ind,]
 ```
+
 # Bagging clásico: mtry=p
 ```{r}
 set.seed(1234)
@@ -58,9 +59,9 @@ preprocess_data <- function(df, ref_df = NULL) {
 train_clean <- preprocess_data(train)
 test_clean  <- preprocess_data(test, ref_df = train_clean)
 
-# =============================================================================
+
 # 1. SIN BALANCEO
-# =============================================================================
+
 modelo_base <- randomForest(
   Exited ~ ., 
   data = train_clean,
@@ -68,9 +69,9 @@ modelo_base <- randomForest(
   ntree = 500
 )
 
-# =============================================================================
+
 # 2. OVERSAMPLING
-# =============================================================================
+
 train_over <- ovun.sample(Exited ~ ., data = train_clean, method = "over", N = 2*nrow(train_clean))$data
 train_over <- preprocess_data(train_over, ref_df = train_clean)
 modelo_over <- randomForest(
@@ -80,9 +81,9 @@ modelo_over <- randomForest(
   ntree = 500
 )
 
-# =============================================================================
+
 # 3. UNDERSAMPLING
-# =============================================================================
+
 train_under <- ovun.sample(Exited ~ ., data = train_clean, method = "under", N = 2*sum(train_clean$Exited==1))$data
 train_under <- preprocess_data(train_under, ref_df = train_clean)
 modelo_under <- randomForest(
@@ -92,9 +93,9 @@ modelo_under <- randomForest(
   ntree = 500
 )
 
-# =============================================================================
+
 # 4. ROSE
-# =============================================================================
+
 train_rose <- ROSE(Exited ~ ., data = train_clean, seed = 1234, p = 0.5)$data
 train_rose <- preprocess_data(train_rose, ref_df = train_clean)
 modelo_rose <- randomForest(
@@ -104,9 +105,9 @@ modelo_rose <- randomForest(
   ntree = 500
 )
 
-# =============================================================================
-# COMPARACIÓN AUTOMÁTICA
-# =============================================================================
+
+# COMPARACIÓN 
+
 modelos <- list(
   "Sin balanceo"   = modelo_base,
   "Oversampling"   = modelo_over,
@@ -114,15 +115,14 @@ modelos <- list(
   "ROSE"           = modelo_rose
 )
 
-# Rango de cortes que quieres probar
-cortes <- seq(0.2, 0.7, by = 0.02)
+# Rango de cortes
+cortes <- seq(0.1, 0.7, by = 0.005)
 
 comparacion <- data.frame()
 
 for(nombre in names(modelos)) {
   modelo <- modelos[[nombre]]
   
-  # Probabilidades en test preprocesado
   probs <- predict(modelo, newdata = test_clean, type = "prob")[, "1"]
   
   for(corte in cortes) {
@@ -141,17 +141,12 @@ for(nombre in names(modelos)) {
   }
 }
 
-# Ver tabla final
 comparacion
 ```
 
 
-
-
-
 # Manipular el valor de mtry=raiz(p)
 ```{r}
-
 set.seed(1234)
 table(train$Exited)
 
@@ -174,13 +169,12 @@ preprocess_data <- function(df, ref_df = NULL) {
   return(df)
 }
 
-# Preprocesar train y test
 train_clean <- preprocess_data(train)
 test_clean  <- preprocess_data(test, ref_df = train_clean)
 
-# =============================================================================
+
 # 1. SIN BALANCEO
-# =============================================================================
+
 modelo_base2 <- randomForest(
   Exited ~ ., 
   data = train_clean,
@@ -188,9 +182,9 @@ modelo_base2 <- randomForest(
   ntree = 500
 )
 
-# =============================================================================
+
 # 2. OVERSAMPLING
-# =============================================================================
+
 train_over <- ovun.sample(Exited ~ ., data = train_clean, method = "over", N = 2*nrow(train_clean))$data
 train_over <- preprocess_data(train_over, ref_df = train_clean)
 modelo_over2 <- randomForest(
@@ -199,9 +193,9 @@ modelo_over2 <- randomForest(
   ntree = 500
 )
 
-# =============================================================================
+
 # 3. UNDERSAMPLING
-# =============================================================================
+
 train_under <- ovun.sample(Exited ~ ., data = train_clean, method = "under", N = 2*sum(train_clean$Exited==1))$data
 train_under <- preprocess_data(train_under, ref_df = train_clean)
 modelo_under2 <- randomForest(
@@ -210,9 +204,9 @@ modelo_under2 <- randomForest(
   ntree = 500
 )
 
-# =============================================================================
+
 # 4. ROSE
-# =============================================================================
+
 train_rose <- ROSE(Exited ~ ., data = train_clean, seed = 1234, p = 0.5)$data
 train_rose <- preprocess_data(train_rose, ref_df = train_clean)
 modelo_rose2 <- randomForest(
@@ -221,9 +215,9 @@ modelo_rose2 <- randomForest(
   ntree = 500
 )
 
-# =============================================================================
-# COMPARACIÓN AUTOMÁTICA
-# =============================================================================
+
+# COMPARACIÓN
+
 modelos <- list(
   "Sin balanceo"   = modelo_base2,
   "Oversampling"   = modelo_over2,
@@ -231,15 +225,14 @@ modelos <- list(
   "ROSE"           = modelo_rose2
 )
 
-# Rango de cortes que quieres probar
-cortes <- seq(0.2, 0.7, by = 0.02)
+# Rango de cortes 
+cortes <- seq(0.1, 0.7, by = 0.005)
 
 comparacion <- data.frame()
 
 for(nombre in names(modelos)) {
   modelo <- modelos[[nombre]]
   
-  # Probabilidades en test preprocesado
   probs <- predict(modelo, newdata = test_clean, type = "prob")[, "1"]
   
   for(corte in cortes) {
@@ -258,25 +251,22 @@ for(nombre in names(modelos)) {
   }
 }
 
-# Ver tabla final
 comparacion
 ```
 
 
 # Random Forest with caret 
 ```{r}
-# =============================================================================
-# BAGGING con diferentes estrategias de balanceo de clases (sin SMOTE)
-# =============================================================================
-# 1. Arreglar nombres ANTES de ROSE
+
+# BAGGING con diferentes estrategias de balanceo
+
+# Arreglar nombres ANTES de ROSE
 names(train) <- make.names(names(train), unique = TRUE)
 names(train) <- substr(names(train), 1, 15)
 
-# 2. Igual para test
 names(test) <- make.names(names(test), unique = TRUE)
 names(test) <- substr(names(test), 1, 15)
 
-# 3. Volver a convertir Exited a factor por seguridad
 train$Exited <- factor(train$Exited)
 test$Exited  <- factor(test$Exited)
 
@@ -290,9 +280,8 @@ mtry.class <- sqrt(num_pred)
 tuneGrid <- data.frame(mtry = unique(pmax(1, pmin(floor(c(mtry.class/2, mtry.class, 2*mtry.class)), num_pred))))
 tuneGrid
 
-# =============================================================================
 # 1. SIN BALANCEO
-# =============================================================================
+
 ctrl_default <- trainControl(method = "repeatedcv", number = 5, repeats = 2)
 set.seed(1234)
 modelo_base3 <- caret::train(Exited ~ .,
@@ -300,9 +289,8 @@ modelo_base3 <- caret::train(Exited ~ .,
                          method = "rf",
                          trControl = ctrl_default,tuneGrid=tuneGrid)
 
-# =============================================================================
 # 2. OVERSAMPLING
-# =============================================================================
+
 ctrl_up <- trainControl(method = "repeatedcv", number = 5, repeats = 2,sampling="up")
 set.seed(1234)
 modelo_over3 <- caret::train(Exited ~ .,
@@ -311,9 +299,8 @@ modelo_over3 <- caret::train(Exited ~ .,
                          trControl = ctrl_up,tuneGrid=tuneGrid)
 
 
-# =============================================================================
 # 3. UNDERSAMPLING
-# =============================================================================
+
 ctrl_down <- trainControl(method = "repeatedcv", number = 5, repeats = 2, sampling = "down")
 set.seed(1234)
 modelo_under3 <- caret::train(Exited ~ .,
@@ -321,9 +308,8 @@ modelo_under3 <- caret::train(Exited ~ .,
                          method = "rf",
                          trControl = ctrl_down,tuneGrid=tuneGrid)
 
-# =============================================================================
+
 # 4. ROSE
-# =============================================================================
 
 #ctrl_ROSE <- trainControl(
 #  method = "repeatedcv",
@@ -370,11 +356,8 @@ modelo_under3 <- caret::train(Exited ~ .,
 #)
 
 
-
-
-# =============================================================================
 # 5. SMOTE
-# =============================================================================
+
 ctrl_SMOTE <- trainControl(method = "repeatedcv", number = 5, repeats = 2, sampling = "smote")
 set.seed(1234)
 modelo_smote3 <-caret::train(Exited ~ .,
@@ -383,9 +366,9 @@ modelo_smote3 <-caret::train(Exited ~ .,
                          trControl = ctrl_SMOTE,tuneGrid=tuneGrid)
 
 
-# =============================================================================
-# COMPARACIÓN AUTOMÁTICA
-# =============================================================================
+
+# COMPARACIÓN 
+
 modelos <- list(
   "Sin balanceo"   = modelo_base3,
   "Oversampling"   = modelo_over3,
@@ -393,15 +376,14 @@ modelos <- list(
   "SMOTE"           = modelo_smote3
 )
 
-# Rango de cortes que quieres probar
-cortes <- seq(0.2, 0.7, by = 0.02)
+# Rango de cortes 
+cortes <- seq(0.1, 0.7, by = 0.005)
 
 comparacion <- data.frame()
 
 for(nombre in names(modelos)) {
   modelo <- modelos[[nombre]]
   
-  # Probabilidades en test preprocesado
   probs <- predict(modelo, newdata = test, type = "prob")[, "1"]
   
   for(corte in cortes) {
@@ -420,7 +402,6 @@ for(nombre in names(modelos)) {
   }
 }
 
-# Ver tabla final
 comparacion
 ```
 
@@ -429,24 +410,22 @@ comparacion
 # Prediccion final
 
 ```{r}
-# SMOTE, corte 0.2
+
 mydata<-read.csv("datos_relevantes.csv")
 datos_test <- mydata %>% filter(is.na(Exited))
 datos_test$Exited <- factor(datos_test$Exited, levels = c(0,1), labels = c("0","1"))
 
-# Predicciones probabilísticas con SMOTE
 probs_smote_test <- predict(modelo_smote3, newdata = datos_test, type = "prob")[, "1"]
 
-# Aplicar punto de corte 0.2
+# Aplicar punto de corte correspondiente
 pred_smote_test <- ifelse(probs_smote_test > 0.2, "Yes", "No")
 
-# Generar dataframe final para submission
 submission_smote <- data.frame(
   ID = datos_test$ID,
   Exited = pred_smote_test
 )
 
-# Guardar CSV
+
 write.csv(submission_smote, "bagging_smote_0.2.csv", row.names = FALSE)
 
 ```
@@ -459,6 +438,7 @@ confusionMatrix(ptrain, train$Exited, positive="1")
 confusionMatrix(pred2, test$Exited, positive="1")
 
 ```
+
 ```{r}
 p4 <- predict(rf.caret, test, type = 'prob')
 head(p4)
