@@ -285,8 +285,14 @@ table(train$Exited)
 
 num_pred <- ncol(train) - 1
 mtry.class <- sqrt(num_pred)
-tuneGrid <- data.frame(mtry = unique(pmax(1, pmin(floor(c(mtry.class/2, mtry.class, 2*mtry.class)), num_pred))))
-tuneGrid
+
+valores_orig <- floor(c(mtry.class/2, mtry.class, 2*mtry.class))
+valores_fijos <- c(2, 4, 6, 8, 10)
+todos_valores <- unique(pmax(1, pmin(c(valores_orig, valores_fijos), num_pred)))
+
+tuneGrid <- data.frame(mtry = todos_valores)
+
+
 
 # =============================================================================
 # 1. SIN BALANCEO
@@ -319,59 +325,9 @@ modelo_under3 <- caret::train(Exited ~ .,
                          method = "rf",
                          trControl = ctrl_down,tuneGrid=tuneGrid)
 
-# =============================================================================
-# 4. ROSE
-# =============================================================================
-
-#ctrl_ROSE <- trainControl(
-#  method = "repeatedcv",
- #number = 5,
- # repeats = 2,
- # sampling = "rose",
- # classProbs = TRUE,
- # summaryFunction = twoClassSummary
-#)
-
-
-#train_fixed <- train %>%
- # mutate(across(where(is.character), as.factor)) %>% 
-  #mutate(across(where(is.logical), as.factor))
-
-
-#train_rose <- ROSE(Exited ~ ., data = train_fixed, seed = 1234)$data
-# Limpiar columnas
-#names(train_rose) <- make.names(names(train_rose))
-
-# Limpiar factores predictivos
-#train_rose <- train_rose %>%
- # mutate(across(-Exited, ~ if(is.factor(.)) {
-  #  vals <- trimws(as.character(.))  # eliminar espacios
-   # vals <- make.unique(vals)         # asegura niveles únicos
-    #factor(vals)
-  #} else .))
-
-# Asegurar factor respuesta
-#train_rose$Exited <- factor(train_rose$Exited, levels = c(0,1), labels = c("No","Yes"))
-# Revisar niveles duplicados
-#sapply(train_rose, function(x) if(is.factor(x)) any(duplicated(levels(x))) else FALSE)
-
-
-
-#set.seed(1234)
-#modelo_rose3 <- caret::train(
- # Exited ~ .,
-  #data = train_rose,
-  #method = "rf",
-  #tuneGrid = tuneGrid,
-  #trControl = ctrl_ROSE,
-  #metric = "ROC"
-#)
-
-
-
 
 # =============================================================================
-# 5. SMOTE
+# 4. SMOTE
 # =============================================================================
 ctrl_SMOTE <- trainControl(method = "repeatedcv", number = 5, repeats = 2, sampling = "smote")
 set.seed(1234)
