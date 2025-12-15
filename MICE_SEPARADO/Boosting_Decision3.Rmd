@@ -374,6 +374,7 @@ results
 
 ## Modelo 3 (SMOTE)
 
+
 ```{r}
 xgb_grid <- expand.grid(
   nrounds = c(300, 500),
@@ -390,15 +391,15 @@ modelo_smote3 <-caret::train(Exited ~ .,
                          data = train,
                          method = "xgbTree",
                          trControl = ctrl_SMOTE,tuneGrid=xgb_grid)
-probs <- predict(modelo_smote3, newdata = test, type = "prob")[, "Yes"]
+probs <- predict(modelo_smote3, newdata = test, type = "prob")[, "1"]
 
 cutoffs <- seq(0.1, 0.9, by = 0.005)
 results_smote <- data.frame()
 
 for(cut in cutoffs){
   
-  pred <- factor(ifelse(probs > cut, "Yes", "No"), levels = levels(test$Exited))
-  cm <- confusionMatrix(pred, test$Exited, positive = "Yes")
+  pred <- factor(ifelse(probs > cut, "1", "0"), levels = levels(test$Exited))
+  cm <- confusionMatrix(pred, test$Exited, positive = "1")
   
   precision <- cm$byClass["Pos Pred Value"]
   recall <- cm$byClass["Sensitivity"]
@@ -419,7 +420,61 @@ for(cut in cutoffs){
 results_smote
 ```
 
+### Analizar Overfitting
 
+```{r}
+probs_train <- predict(modelo_smote3, newdata = train, type = "prob")[, "1"]
+pred_train <- factor(ifelse(probs_train > 0.335, "1", "0"), levels = levels(train$Exited))
+cm_train<- confusionMatrix(pred_train, train$Exited, positive = "1")
+cm_train
+probs_test <- predict(modelo_smote3, newdata = test, type = "prob")[, "1"]
+pred_test <- factor(ifelse(probs_test > 0.335, "1", "0"), levels = levels(test$Exited))
+cm_test <- confusionMatrix(pred_test, test$Exited, positive = "1")
+cm_test
+
+library(pROC)
+auc_train <- roc(train$Exited, probs_train)$auc
+auc_test  <- roc(test$Exited, probs_test)$auc
+auc_train
+auc_test
+```
+-Vemos un accuracy muy similar entre train y test, por lo tanto, podemos decir que no hay overfitting.
+
+```{r}
+tabla_overfitting <- data.frame(
+  Dataset = c("Train", "Test"),
+  Accuracy = c(0.7771, 0.7901),
+  Kappa = c(0.3832, 0.4195),
+  Recall = c(0.5967, 0.6462),
+  Specificity = c(0.8243, 0.8263),
+  Precision = c(0.4706, 0.4831),
+  Balanced_Accuracy = c(0.7105, 0.7363)
+)
+
+
+
+library(ggplot2)
+library(tidyr)
+
+tabla_long <- pivot_longer(
+  tabla_overfitting,
+  cols = -Dataset,
+  names_to = "Metric",
+  values_to = "Value"
+)
+
+ggplot(tabla_long, aes(x = Metric, y = Value, fill = Dataset)) +
+  geom_col(position = "dodge") +
+  ylim(0, 1) +
+  labs(
+    title = "Comparación de métricas: Train vs Test",
+    y = "Valor",
+    x = "Métrica"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
 
 # Predicción final
 
