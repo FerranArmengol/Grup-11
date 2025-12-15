@@ -22,6 +22,7 @@ library(smotefamily)
 
 ```{r}
 mydata<-read.csv("C:/Users/usuario/Downloads/datos_relevantes_Train_Decision1.csv")
+mydata <-mydata %>% select(-ID)
 mydata$Exited<-factor(mydata$Exited)
 set.seed(1234)
 ind <- sample(1:nrow(mydata), 0.7*nrow(mydata))
@@ -285,8 +286,14 @@ table(train$Exited)
 
 num_pred <- ncol(train) - 1
 mtry.class <- sqrt(num_pred)
-tuneGrid <- data.frame(mtry = unique(pmax(1, pmin(floor(c(mtry.class/2, mtry.class, 2*mtry.class)), num_pred))))
-tuneGrid
+
+valores_orig <- floor(c(mtry.class/2, mtry.class, 2*mtry.class))
+valores_fijos <- c(2, 4, 6, 8, 10)
+todos_valores <- unique(pmax(1, pmin(c(valores_orig, valores_fijos), num_pred)))
+
+tuneGrid <- data.frame(mtry = todos_valores)
+
+
 
 # =============================================================================
 # 1. SIN BALANCEO
@@ -296,7 +303,7 @@ set.seed(1234)
 modelo_base3 <- caret::train(Exited ~ .,
                          data = train,
                          method = "rf",
-                         trControl = ctrl_default,tuneGrid=tuneGrid)
+                         trControl = ctrl_default,tuneGrid=tuneGrid,ntree=1)
 
 # =============================================================================
 # 2. OVERSAMPLING
@@ -306,7 +313,7 @@ set.seed(1234)
 modelo_over3 <- caret::train(Exited ~ .,
                          data = train,
                          method = "rf",
-                         trControl = ctrl_up,tuneGrid=tuneGrid)
+                         trControl = ctrl_up,tuneGrid=tuneGrid,ntree=1)
 
 
 # =============================================================================
@@ -317,61 +324,11 @@ set.seed(1234)
 modelo_under3 <- caret::train(Exited ~ .,
                          data = train,
                          method = "rf",
-                         trControl = ctrl_down,tuneGrid=tuneGrid)
-
-# =============================================================================
-# 4. ROSE
-# =============================================================================
-
-#ctrl_ROSE <- trainControl(
-#  method = "repeatedcv",
- #number = 5,
- # repeats = 2,
- # sampling = "rose",
- # classProbs = TRUE,
- # summaryFunction = twoClassSummary
-#)
-
-
-#train_fixed <- train %>%
- # mutate(across(where(is.character), as.factor)) %>% 
-  #mutate(across(where(is.logical), as.factor))
-
-
-#train_rose <- ROSE(Exited ~ ., data = train_fixed, seed = 1234)$data
-# Limpiar columnas
-#names(train_rose) <- make.names(names(train_rose))
-
-# Limpiar factores predictivos
-#train_rose <- train_rose %>%
- # mutate(across(-Exited, ~ if(is.factor(.)) {
-  #  vals <- trimws(as.character(.))  # eliminar espacios
-   # vals <- make.unique(vals)         # asegura niveles únicos
-    #factor(vals)
-  #} else .))
-
-# Asegurar factor respuesta
-#train_rose$Exited <- factor(train_rose$Exited, levels = c(0,1), labels = c("No","Yes"))
-# Revisar niveles duplicados
-#sapply(train_rose, function(x) if(is.factor(x)) any(duplicated(levels(x))) else FALSE)
-
-
-
-#set.seed(1234)
-#modelo_rose3 <- caret::train(
- # Exited ~ .,
-  #data = train_rose,
-  #method = "rf",
-  #tuneGrid = tuneGrid,
-  #trControl = ctrl_ROSE,
-  #metric = "ROC"
-#)
-
-
+                         trControl = ctrl_down,tuneGrid=tuneGrid,ntree=1)
 
 
 # =============================================================================
-# 5. SMOTE
+# 4. SMOTE
 # =============================================================================
 ctrl_SMOTE <- trainControl(method = "repeatedcv", number = 5, repeats = 2, sampling = "smote")
 set.seed(1234)
@@ -428,26 +385,21 @@ comparacion
 # Prediccion final
 
 ```{r}
-# SMOTE
-mydata<-read.csv("datos_relevantes.csv")
-datos_test <- mydata %>% filter(is.na(Exited))
-datos_test$Exited <- factor(datos_test$Exited, levels = c(0,1), labels = c("0","1"))
+datos_test<-read.csv("datos_relevantes_Test.csv")
+id_test <- datos_test$ID
+datos_test <- datos_test %>% select(-ID)
 
-# Predicciones probabilísticas con SMOTE
+
 probs_smote_test <- predict(modelo_smote3, newdata = datos_test, type = "prob")[, "1"]
 
-# Aplicar punto de corte 0.2
-pred_smote_test <- ifelse(probs_smote_test > 0.230	, "Yes", "No")
+pred_smote_test <- ifelse(probs_smote_test > 0.230    , "Yes", "No")
 
-# Generar dataframe final para submission
 submission_smote <- data.frame(
-  ID = datos_test$ID,
-  Exited = pred_smote_test
-)
+  ID = id_test,
+  Exited = pred_smote_test)
 
-# Guardar CSV
-write.csv(submission_smote, "bagging_smote_0.230.csv", row.names = FALSE)
 
+write.csv(submission_smote, "bagging_smote_0.230_decision1.csv", row.names = FALSE)
 ```
 
 
