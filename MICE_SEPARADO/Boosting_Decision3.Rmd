@@ -375,13 +375,14 @@ results
 ## Modelo 3 (SMOTE)
 
 ```{r}
-xgb_grid <- expand.grid(nrounds = c(200, 300, 400),          
-  max_depth = c(2,4, 6),         
-  eta = c(0.04, 0.01, 0.05),            
-  gamma = 0,
-  colsample_bytree = c(0.8),
-  min_child_weight = c(1, 3),    
-  subsample = 0.8)
+xgb_grid <- expand.grid(
+  nrounds = c(300, 500),
+  max_depth = c(2, 4),
+  eta = c(0.01, 0.03),
+  gamma = c(0, 0.2),
+  colsample_bytree = c(0.7, 0.9),
+  min_child_weight = c(1, 5),
+  subsample = c(0.7, 0.9))
 
 ctrl_SMOTE <- trainControl(method = "repeatedcv", number = 5, sampling = "smote")
 set.seed(123)
@@ -389,15 +390,15 @@ modelo_smote3 <-caret::train(Exited ~ .,
                          data = train,
                          method = "xgbTree",
                          trControl = ctrl_SMOTE,tuneGrid=xgb_grid)
-probs <- predict(modelo_smote3, newdata = test, type = "prob")[, "Class1"]
+probs <- predict(modelo_smote3, newdata = test, type = "prob")[, "Yes"]
 
 cutoffs <- seq(0.1, 0.9, by = 0.005)
 results_smote <- data.frame()
 
 for(cut in cutoffs){
   
-  pred <- factor(ifelse(probs > cut, "Class1", "Class0"), levels = levels(test$Exited))
-  cm <- confusionMatrix(pred, test$Exited, positive = "Class1")
+  pred <- factor(ifelse(probs > cut, "Yes", "No"), levels = levels(test$Exited))
+  cm <- confusionMatrix(pred, test$Exited, positive = "Yes")
   
   precision <- cm$byClass["Pos Pred Value"]
   recall <- cm$byClass["Sensitivity"]
@@ -417,6 +418,8 @@ for(cut in cutoffs){
 
 results_smote
 ```
+
+
 
 # Predicción final
 
@@ -444,8 +447,8 @@ for (col in setdiff(names(datos_test), factor_cols)) {
 }
 
 # Predicción con XGB
-probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"Class1"]
-pred_submission <- ifelse(probs_submission > 0.325,"Yes", "No")
+probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"Yes"]
+pred_submission <- ifelse(probs_submission > 0.335,"Yes", "No")
 
 # Crear submission
 submission <- data.frame(
@@ -455,6 +458,5 @@ submission <- data.frame(
 
 submission
 
-write.csv(submission, "Boosting_XGB_SMOTE_0.325_Decision3.csv", row.names = FALSE)
-
+write.csv(submission, "Boosting_XGB_SMOTE_0.335_Decision3.csv", row.names = FALSE)
 ```
