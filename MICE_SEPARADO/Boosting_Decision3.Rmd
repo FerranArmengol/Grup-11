@@ -420,15 +420,49 @@ for(cut in cutoffs){
 results_smote
 ```
 
+### Curva ROC
+```{r}
+#install.packages("pROC")  
+library(pROC)
+
+p4 <- predict(modelo_smote3, test, type = "prob")
+head(p4)
+
+p4 <- p4[, "1"]
+
+r <- multiclass.roc(
+  response = test$Exited,
+  predictor = p4,
+  percent = TRUE)
+
+roc_list <- r[["rocs"]]
+r1 <- roc_list[[1]]
+```
+```{r}
+plot.roc(
+  r1,
+  print.auc = TRUE,
+  auc.polygon = TRUE,
+  grid = c(0.1, 0.2),
+  grid.col = c("green", "red"),
+  max.auc.polygon = TRUE,
+  auc.polygon.col = "lightblue",
+  print.thres = TRUE,
+  main = "ROC Curve – XGBoost + SMOTE"
+)
+
+
+```
+
 ### Analizar Overfitting
 
 ```{r}
 probs_train <- predict(modelo_smote3, newdata = train, type = "prob")[, "1"]
-pred_train <- factor(ifelse(probs_train > 0.335, "1", "0"), levels = levels(train$Exited))
+pred_train <- factor(ifelse(probs_train > 0.345, "1", "0"), levels = levels(train$Exited))
 cm_train<- confusionMatrix(pred_train, train$Exited, positive = "1")
 cm_train
 probs_test <- predict(modelo_smote3, newdata = test, type = "prob")[, "1"]
-pred_test <- factor(ifelse(probs_test > 0.335, "1", "0"), levels = levels(test$Exited))
+pred_test <- factor(ifelse(probs_test > 0.345, "1", "0"), levels = levels(test$Exited))
 cm_test <- confusionMatrix(pred_test, test$Exited, positive = "1")
 cm_test
 
@@ -446,12 +480,11 @@ Además, las métricas de discriminación (AUC) son prácticamente idénticas en
 ```{r}
 tabla_overfitting <- data.frame(
   Dataset = c("Train", "Test"),
-  Accuracy = c(0.7771, 0.7901),
-  Kappa = c(0.3832, 0.4195),
-  Recall = c(0.5967, 0.6462),
-  Specificity = c(0.8243, 0.8263),
-  Precision = c(0.4706, 0.4831),
-  Balanced_Accuracy = c(0.7105, 0.7363)
+  Accuracy = c(0.7928, 0.7967),
+  Kappa = c(0.4083, 0.4202),
+  Recall = c(0.5886, 0.6173),
+  Specificity = c(0.8463, 0.8417),
+  Precision = c(0.5005, 0.4949)
 )
 
 
@@ -479,6 +512,7 @@ ggplot(tabla_long, aes(x = Metric, y = Value, fill = Dataset)) +
 
 ```
 
+
 # Predicción final
 
 ```{r}
@@ -504,8 +538,8 @@ for (col in setdiff(names(datos_test), factor_cols)) {
 }
 
 # Predicción con XGB
-probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"Yes"]
-pred_submission <- ifelse(probs_submission > 0.335,"Yes", "No")
+probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"1"]
+pred_submission <- ifelse(probs_submission > 0.345,"Yes", "No")
 
 # Crear submission
 submission <- data.frame(
@@ -515,5 +549,5 @@ submission <- data.frame(
 
 submission
 
-write.csv(submission, "Boosting_XGB_SMOTE_0.335_Decision3.csv", row.names = FALSE)
+write.csv(submission, "Boosting_XGB_SMOTE_0.345_Decision3.csv", row.names = FALSE)
 ```
