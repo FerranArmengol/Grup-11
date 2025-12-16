@@ -4,6 +4,9 @@ output: html_document
 date: "2025-11-18"
 ---
 
+
+# Lectura de datos (base de datos completa)
+
 ```{r}
 library(DAAG)
 library(party)
@@ -18,9 +21,8 @@ library(printr)
 library(dplyr)
 ```
 
-# Lectura de datos (base de datos completa)
 ```{r}
-mydata<-read.csv("C:/Users/Armengol/Downloads/datos_missing_train.csv")
+mydata<-read.csv("datos_missing_train.csv")
 mydata <- mydata %>%
   filter(!is.na(Exited))  %>%
   select(-ID)
@@ -155,8 +157,7 @@ library(rpart.plot)
 library(ROSE)
 library(dplyr)
 
-# 1. Preparamos datos 
-mydata <- read.csv("datos_missing.csv")
+mydata <- read.csv("datos_missing_train.csv")
 mydata <- mydata %>%
   filter(!is.na(Exited)) %>%
   select(-ID)
@@ -169,7 +170,6 @@ test  <- mydata[-ind, ]
 
 p_est <- mean(mydata$Exited == 1) 
 
-# 2. Función para entrenar árbol y calcular F1
 train_and_evaluate <- function(train_data, test_data, cp_prune = 0.0033) {
   tree <- rpart(Exited ~ ., data = train_data, cp = 0)
   xerror <- tree$cptable[,"xerror"]
@@ -194,68 +194,42 @@ train_and_evaluate <- function(train_data, test_data, cp_prune = 0.0033) {
   cm_test <- confusionMatrix(pred_test, test_data$Exited, positive = "1")
   precision_test <- cm_test$byClass["Precision"]
   recall_test <- cm_test$byClass["Recall"]
+  especificidad<-cm_test$byClass["Specificity"]
   F1_test <- 2 * (precision_test * recall_test) / (precision_test + recall_test)
   
   return(list(tree = tree,
               importance = importance,
               F1_train = F1_train,
-              F1_test = F1_test))
+              F1_test = F1_test,
+              recall_test=recall_test,
+              especificidad=especificidad))
 }
 
 
-# 3a. Oversampling 
+#  Oversampling 
 train_over <- upSample(x = train[, setdiff(names(train), "Exited")],
                        y = train$Exited,
                        yname = "Exited")
 res_over <- train_and_evaluate(train_over, test)
 
-# 3b. Undersampling
+#  Undersampling
 train_under <- downSample(x = train[, setdiff(names(train), "Exited")],
                           y = train$Exited,
                           yname = "Exited")
 res_under <- train_and_evaluate(train_under, test)
 
 
-# 4. Comparar F1-test
 f1_results <- data.frame(
-  Method = c("Original", "Oversampling", "Undersampling"),
+  Method = c("Original", "Oversampling", "Undersampling", "Recall Over", "Specificity Over"),
   F1_test = c(
    train_and_evaluate(train,test)$F1_test,
     res_over$F1_test,
-    res_under$F1_test  )
+    res_under$F1_test,
+  res_over$recall_test,
+   res_over$especificidad)
 )
 print(f1_results)
 
 ```
 
-## Predicción Final
-```{r}
-library(rpart)
-library(rpart.plot)
-library(dplyr)
-library(caret)
-library(ROSE)
-
-datos <- read.csv("datos_missing.csv")
-datos_test <- datos %>% filter(is.na(Exited))
-datos_test$Exited <- factor(datos_test$Exited)
-
-train_over <- upSample(x = mydata[, setdiff(names(mydata), "Exited")],
-                       y = mydata$Exited,
-                       yname = "Exited")
-
-tree_final <- rpart(Exited ~ ., data = train_over, cp = 0)
-tree_final <- prune(tree_final, cp = 0.0033)
-
-# Predicciones en test final con punto de corte
-probs_cart_final <- predict(tree_final, newdata = datos_test, type = "prob")[, "1"]
-pred_cart_final_corte <- ifelse(probs_cart_final > 0.5, "1", "0")
-
-
-pred_test_final_cart <- ifelse(pred_cart_final_corte == "0", "No", "Yes")
-
-
-resultado_cart_corte <- data.frame(ID = datos_test$ID, Exited = pred_test_final_cart)
-write.csv(resultado_cart_corte, "resultado_cart_corte.csv", row.names = FALSE)
-```
 
