@@ -21,7 +21,7 @@ library(smotefamily)
 library(DMwR2) 
 ```
 ```{r}
-mydata <- read.csv("C:/Users/usuario/Downloads/datos_relevantes_Train_Decision3.csv") 
+mydata <- read.csv("datos_relevantes_Train_Decision3.csv") 
 
 
 mydata <- mydata %>% select(-ID )%>%
@@ -47,7 +47,7 @@ r <- cm$byClass["Recall"]
 2*p*r/(p+r)
 }
 
-# Ajustar punto de corte
+# Para ajustar el punto de corte
 
 threshold_eval <- function(probs, true){
 cortes <- seq(0.1, 0.9, 0.01)
@@ -180,7 +180,7 @@ datos_test <- read.csv("datos_relevantes_Test.csv")
 
 id_test <- datos_test$ID
 
-# --- MUY IMPORTANTE ---
+# IMPORTANTE 
 # 1. Convertir las columnas factor al mismo tipo
 for (col in factor_cols) {
   if (col %in% names(datos_test)) {
@@ -377,13 +377,13 @@ results
 
 ```{r}
 xgb_grid <- expand.grid(
-  nrounds = c(300, 500),
-  max_depth = c(2, 4),
-  eta = c(0.01, 0.03),
-  gamma = c(0, 0.2),
-  colsample_bytree = c(0.7, 0.9),
-  min_child_weight = c(1, 5),
-  subsample = c(0.7, 0.9))
+  nrounds = c(600, 800, 1000),
+  max_depth = c(2, 3),
+  eta = c(0.005, 0.01),
+  gamma = c(0, 0.05),
+  colsample_bytree = c(0.6, 0.8),
+  min_child_weight = c(1, 2),
+  subsample = c(0.6, 0.8))
 
 ctrl_SMOTE <- trainControl(method = "repeatedcv", number = 5, sampling = "smote")
 set.seed(123)
@@ -438,7 +438,10 @@ auc_test  <- roc(test$Exited, probs_test)$auc
 auc_train
 auc_test
 ```
--Vemos un accuracy muy similar entre train y test, por lo tanto, podemos decir que no hay overfitting.
+
+Vemos un accuracy muy similar entre train y test, por lo tanto, podemos decir que no hay overfitting.
+Además, las métricas de discriminación (AUC) son prácticamente idénticas en los conjuntos de entrenamiento y test, y la sensibilidad incluso mejora en test, lo que indica una buena capacidad de generalización.
+
 
 ```{r}
 tabla_overfitting <- data.frame(
@@ -483,12 +486,11 @@ ggplot(tabla_long, aes(x = Metric, y = Value, fill = Dataset)) +
 datos_test <- read.csv("datos_relevantes_Test.csv")
 
 
-# Guardar ID
+# Guardarmos el ID
 id_test <- datos_test$ID
 
 
-# --- MUY IMPORTANTE ---
-# Aplicar EXACTAMENTE el mismo preprocesado que train
+# IMPORTANTE
 # 1. Convertir las columnas factor al mismo tipo
 for (col in factor_cols) {
   if (col %in% names(datos_test)) {
