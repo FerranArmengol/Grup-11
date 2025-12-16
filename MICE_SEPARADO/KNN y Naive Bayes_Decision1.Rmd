@@ -23,9 +23,10 @@ library(vcd)
 ```
 
 ```{r}
-datos<-read.csv("C:/Users/Armengol/Downloads/datos_relevantes_Train_Decision1.csv")
+datos<-read.csv("datos_relevantes_Train_Decision1.csv")
 datos <- datos %>%
   filter(!is.na(Exited))
+datos <- datos %>% select(-ID)
 hist(datos[, "Exited"])
 datos$Exited <- as.factor(datos$Exited)
 summary(datos$Exited)
@@ -90,6 +91,7 @@ ctrl_smote <- trainControl(method = "repeatedcv", number = 10, repeats = 10,
 
 ### Calcular ncp
 ```{r}
+
 famd_model <- FAMD(train_data[, !(names(train_data) %in% "Exited")], ncp = 10, graph = FALSE)
 famd_model$eig #Elegimos ncp=6 con varianza explicativa de 80%
 ```
@@ -333,61 +335,9 @@ result5<-data.frame(Accuracy = cm$overall["Accuracy"],
 
 ```
 
-Nos quedamos con los metodos de balanceo oversampling y SMOTE, ya que tienen mayor recall, en este caso la matriz de confusion esta hecha a partir de los valores negativos, haciendo que los KPI's esten al reves, por lo tanto observaremos la especificidad (que sera el recall), la cual en estos dos métodos es de 0.6229885, 
+Nos quedamos con los metodos de balanceo sin balanceo, undersampling y ROSE, ya que tienen mayor F1, en este caso la matriz de confusion esta hecha a partir de los valores negativos, haciendo que los KPI's esten al reves, por lo tanto observaremos la especificidad (en el recall).
 
-# Predicción final KNN
 
-```{r}
-datos<-read.csv("C:/Users/Armengol/Downloads/datos_relevantes_Train_Decision1.csv")
-datos_test <- datos %>%
-  filter(is.na(Exited))
-datos_test$Exited<-factor(datos_test$Exited)
-
-#Transformar el test_final con el mismo FAMD
-
-test_final_famd <- predict(famd_res, newdata = datos_test)$coord
-test_final_famd <- as.data.frame(test_final_famd)
-names(test_final_famd) <- gsub("dim ", "Dim.", names(test_final_famd), ignore.case = TRUE)
-
-#Predecir Exited en el test final
-
-probs_knn_final <- predict(best_model3, newdata = test_final_famd, type = "prob")[, "1"]
-pred_knn_final_corte1 <- ifelse(probs_knn_final > p_corte, "1", "0")
-
-pred_test_final_corte1 <- ifelse(pred_knn_final_corte1 == "0", "No", "Yes")
-
-# Crear dataframe con resultados finales
-resultado_knn_corte1 <- data.frame(ID = datos_test$ID, Exited = pred_test_final_corte1)
-write.csv(resultado_knn_corte1, "resultado_knn_corte1.csv", row.names = FALSE)
-
-```
-
-Al usar el punto de corte vemos como en los otros metodos de balanceo aumenta el f1 score por lo tanto tambien los probaremos para la competencia, como el no balanceado, el undersampling y el ROSE dan los mismos resultados usaremos cualquiera de ellos.
-
-```{r}
-datos<-read.csv("C:/Users/Armengol/Downloads/datos_relevantes_Train_Decision1.csv")
-datos_test <- datos %>%
-  filter(is.na(Exited))
-datos_test$Exited<-factor(datos_test$Exited)
-
-#Transformar el test_final con el mismo FAMD
-
-test_final_famd <- predict(famd_res, newdata = datos_test)$coord
-test_final_famd <- as.data.frame(test_final_famd)
-names(test_final_famd) <- gsub("dim ", "Dim.", names(test_final_famd), ignore.case = TRUE)
-
-#Predecir Exited en el test final
-
-probs_knn_final <- predict(best_model4, newdata = test_final_famd, type = "prob")[, "1"]
-pred_knn_final_corte2 <- ifelse(probs_knn_final > p_corte, "1", "0")
-
-pred_test_final_corte2 <- ifelse(pred_knn_final_corte2 == "0", "No", "Yes")
-
-# Crear dataframe con resultados finales
-resultado_knn_corte2 <- data.frame(ID = datos_test$ID, Exited = pred_test_final_corte2)
-write.csv(resultado_knn_corte2, "resultado_knn_corte2.csv", row.names = FALSE)
-
-```
 
 # NAIVE BAYES
 ```{r}
@@ -548,28 +498,4 @@ result_nb
 
 ```
 
-# Predicción final Naive Bayes
-```{r}
-datos <- read.csv("C:/Users/Armengol/Downloads/datos_relevantes_Train_Decision1.csv")
-
-# Seleccionar los datos sin la variable de salida (Exited)
-datos_test <- datos %>%
-  filter(is.na(Exited))
-
-# Aplicar el mismo FAMD al conjunto test final
-test_final_famd <- predict(famd_res, newdata = datos_test)$coord
-test_final_famd <- as.data.frame(test_final_famd)
-names(test_final_famd) <- gsub("dim ", "Dim.", names(test_final_famd), ignore.case = TRUE)
-
-# Predecir Exited en el test final usando el modelo Naive Bayes entrenado
-pred_test_final_nb <- predict(nb_base, newdata = test_final_famd)
-
-pred_test_final_nb <- ifelse(pred_test_final_nb == "0", "No", "Yes")
-
-# Crear dataframe con resultados finales
-resultado_bayes <- data.frame(ID = datos_test$ID, Exited = pred_test_final_nb)
-write.csv(resultado_bayes, "resultados_bayes.csv", row.names = FALSE)
-# Mostrar primeras filas
-head(resultado_bayes)
-```
 Como en el KNN, la matriz de confusion esta hecha a partir de los valores negativos, haciendo que los KPI's esten al reves, por lo tanto observaremos la especificidad (que será el recall).
