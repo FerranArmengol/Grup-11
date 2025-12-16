@@ -1,6 +1,6 @@
 ---
 title: "SVM"
-author: "Grupo 11"
+author: "Max Ranz de la Iglesia"
 date: "2025-12-05"
 output: html_document
 ---
@@ -17,14 +17,13 @@ library(ggplot2)
 library(ISLR)
 library(dplyr)
 library(ROSE)
-library(DMwR2)
 library(caret)
 library(smotefamily)
 library(SMOTEWB)
 ```
 
 ```{r}
-datos<-read.csv("datos_missing.csv")
+datos<-read.csv("datos_relevantes.csv")
 datos <- datos %>%
   filter(!is.na(Exited))  %>%
   select(-ID)
@@ -42,13 +41,15 @@ test <- datos[-ind,]
 ```{r}
 set.seed(1234)
 
-#svm_cv <- tune("svm", Dictamen ~ ., data = dataTrain, kernel = 'radial',
-   #       ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 20),
-    #                    gamma = c(0.5, 1, 2, 3, 4, 5, 10)), scale=TRUE)
 
-svm_cv2 <- tune("svm", Exited ~ ., data = train, kernel = 'radial',
-               ranges = list(cost = c(0.1, 1, 50),
-                             gamma = c(0.1, 1, 2)), scale=TRUE)
+svm_cv2<- tune.svm(
+  Exited ~ ., 
+  data = train,
+  kernel = "radial",
+  cost = c(0.001, 0.01, 0.1, 1, 5, 10, 20),
+  gamma = c(0.5, 1, 2, 3, 4, 5, 10),
+  scale = TRUE
+)
 
 ggplot(data = svm_cv2$performances, aes(x = cost, y = error, color = as.factor(gamma)))+
   geom_line() +
@@ -58,11 +59,27 @@ ggplot(data = svm_cv2$performances, aes(x = cost, y = error, color = as.factor(g
   theme(legend.position = "bottom")
 svm_cv2$best.parameters
 modelo_svm_rbf <- svm_cv2$best.model
-
+modelo_svm_rbf
+svm.pred <- predict(modelo_svm_rbf, test[,-21])
+t2<-table(svm.pred, test$Exited)
+t2
+TP <- t2[2,2]
+FN <- t2[1,2]
+FP <- t2[2,1]
+    
+recall <- TP / (TP + FN)
+precision <- TP / (TP + FP)
+f1 <- 2 * (precision * recall) / (precision + recall)
+    
+n<-nrow(test)
+accuracy2<-(sum(diag(t2))/n)
+accuracy2
+accuracy
 
 balance_methods <- c("none", "oversample", "undersample", "ROSE")
 results <- data.frame(balance_method=character(),
                       cutoff=numeric(),
+                      accuracy=numeric(),
                       recall=numeric(),
                       f1=numeric(),
                       stringsAsFactors = FALSE)
@@ -71,7 +88,6 @@ results <- data.frame(balance_method=character(),
 cutoffs <- seq(0.1, 0.9, by = 0.005)
 for (method in balance_methods) {
   
-  # Balancear dataset
   if (method == "none") {
     train_bal <- train
   } else if (method == "oversample") {
@@ -86,11 +102,10 @@ for (method in balance_methods) {
     train_mod <- train
     char_cols <- sapply(train_mod, is.character)
     train_mod[, char_cols] <- lapply(train_mod[, char_cols], factor)
-    train_bal <- ROSE(Exited ~ ., data = train_mod, seed = 123)$data
+    train_bal <- ROSE::ROSE(Exited ~ ., data = train_mod, seed = 123)$data
   }
   
 
-  # Entrenar modelo SVM radial
   modelo_svm <- svm(Exited ~ ., data = train_bal, kernel = "radial",
                     cost =  modelo_svm_rbf$cost, gamma = modelo_svm_rbf$gamma, probability = TRUE, scale = TRUE)
   
@@ -106,7 +121,9 @@ for (method in balance_methods) {
     TP <- t2[2,2]
     FN <- t2[1,2]
     FP <- t2[2,1]
+    TN<-t2[1,1]
     
+    accuracy<-(TN+TP)/(TN+TP+FP+FN)
     recall <- TP / (TP + FN)
     precision <- TP / (TP + FP)
     f1 <- 2 * (precision * recall) / (precision + recall)
@@ -114,6 +131,7 @@ for (method in balance_methods) {
     results <- rbind(results,
                      data.frame(balance_method = method,
                                 cutoff = c,
+                                accuracy=accuracy,
                                 recall = recall,
                                 f1 = f1))
   }
@@ -123,58 +141,249 @@ print(results)
 
 ```
 
+### Kernel radial con SMOTE
+
+```{r}
+
+set.seed(1234)
+train$Exited <- as.factor(train$Exited)
+train$Exited <- factor(train$Exited, levels = c("0", "1"), labels = c("No", "Yes"))
+
+
+ctrl_SMOTE <- trainControl(
+  method = "repeatedcv",   
+  number = 5,              
+  repeats = 2,            
+  sampling = "smote",      
+  classProbs = TRUE,      
+  summaryFunction = twoClassSummary)
+
+
+svm_grid <- expand.grid(C = c(0.001, 0.01, 0.1, 1, 5, 10, 20),sigma = c(0.5, 1, 2, 3, 4, 5, 10))
+
+modelo_svm_rad_smote <- train(
+  Exited ~ ., 
+  data = train,
+  method = "svmRadial",
+  metric = "ROC",         
+  trControl = ctrl_SMOTE,
+  tuneGrid = svm_grid,
+  preProcess = c("center", "scale"))
+
+modelo_svm_rad_smote$bestTune
+print(modelo_svm_rad_smote)
+results <- data.frame(cutoff=numeric(),
+                      accuracy= numeric(),
+                      recall=numeric(),
+                      f1=numeric())
+
+cutoffs <- seq(0.01, 0.99, by = 0.01)
+
+
+
+test$Exited <- factor(test$Exited, levels = c("0","1"), labels = c("No","Yes"))
+
+prob_test <- predict(modelo_svm_rad_smote, newdata = test, type = "prob")
+prob_test <- prob_test$Yes   
+summary(prob_test)
+table(prob_test)
+head(prob_test)
+
+
+for (c in cutoffs) {
+  pred_corte_test <- factor(ifelse(prob_test > c, "Yes", "No"), levels = c("No","Yes"))
+  
+cm <- confusionMatrix(data = pred_corte_test,reference = test$Exited,positive = "Yes")
+
+  recall <-cm$byClass["Recall"]
+  precision <-  cm$byClass["Pos Pred Value"]
+  accuracy<- cm$overall["Accuracy"]
+  f1 <-  2 * (precision * recall) / (precision + recall)
+  
+  results <- rbind(results,
+                   data.frame(cutoff = c,
+                              accuracy= accuracy,
+                              recall = recall,
+                              f1 = f1))
+}
+
+# Mostrar resultados
+print(results)
+```
+
+
+```{r}
+mydata<-read.csv("datos_relevantes.csv")
+datos_test <- mydata %>% filter(is.na(Exited))
+datos_test$Exited <- factor(datos_test$Exited, levels = c(0,1), labels = c("0","1"))
+
+# Predicciones probabilísticas
+probs_test <- predict(modelo_svm_rad_smote, newdata = datos_test, type = "prob")[, "Yes"]
+
+# Aplicar punto de corte 
+pred_smote_test <- ifelse(probs_test > 0.41	, "Yes", "No")
+
+submission_smote <- data.frame(
+  ID = datos_test$ID,
+  Exited = pred_smote_test
+)
+
+write.csv(submission_smote, "svmrad_smote_0.41.csv", row.names = FALSE)
+```
 
 ## Kernel linear
 ```{r}
 set.seed(1234)
 
-#svm_cv_linear <- tune("svm", Dictamen ~ ., data = dataTrain, kernel = 'radial',
-   #       ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 20)),scale=TRUE)
-
 svm_cv2_linear <- tune("svm", Exited ~ ., data = train, kernel = 'linear',
-               ranges = list(cost = c(0.01, 0.1, 1, 5)), scale=TRUE)
-
-ggplot(data = svm_cv2_linear$performances, aes(x = cost, y = error)) +
-  geom_line() +
-  geom_point() +
-  labs(title = "Error de clasificación vs C (kernel lineal)") +
-  theme_bw() +
-  theme(legend.position = "bottom")
+               ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 20)), scale=TRUE)
 
 svm_cv2_linear$best.parameters
-modelo_svm_linear  <- svm_cv2_linear$best.model
-modelo_svm_linear 
-
-modelo_svm_linear <- svm(Exited ~ ., data = train,
-                         kernel = "linear",
-                         cost = svm_cv2_linear$best.model$cost,
-                         probability = TRUE,
-                         scale=TRUE)
-
-prob_test <- predict(modelo_svm_linear, newdata = test, probability = TRUE)
-prob_test <- attr(prob_test, "probabilities")[, "1"]
-
-cutoffs <- seq(0.1, 0.9, by = 0.005)
-results <- data.frame(cutoff = numeric(), accuracy=numeric(), recall = numeric(), f1 = numeric())
-for (c in cutoffs) {
-  pred_corte_test <- factor(ifelse(prob_test > c, "1", "0"), levels = levels(test$Exited))
-  
-t2<-table(pred_corte_test, test$Exited)
+modelo_svm_linear <- svm_cv2_linear$best.model
+modelo_svm_linear
+svm.pred <- predict(modelo_svm_linear, test[,-21])
+t2<-table(svm.pred, test$Exited)
 t2
 TP <- t2[2,2]
-TN <- t2[1,1]
-FP <- t2[2,1]
 FN <- t2[1,2]
-
+FP <- t2[2,1]
+   
 recall <- TP / (TP + FN)
 precision <- TP / (TP + FP)
 f1 <- 2 * (precision * recall) / (precision + recall)
+    
 n<-nrow(test)
 accuracy2<-(sum(diag(t2))/n)
 accuracy2
+accuracy
 
-results <- rbind(results, data.frame(cutoff = c, accuracy=accuracy2, recall = recall, f1 = f1))
+balance_methods <- c("none", "oversample", "undersample", "ROSE")
+results <- data.frame(balance_method=character(),
+                      cutoff=numeric(),
+                      accuracy=numeric(),
+                      recall=numeric(),
+                      f1=numeric(),
+                      stringsAsFactors = FALSE)
+
+
+cutoffs <- seq(0.1, 0.9, by = 0.005)
+for (method in balance_methods) {
+  
+  if (method == "none") {
+    train_bal <- train
+  } else if (method == "oversample") {
+    train_bal <- upSample(x = train[, -which(names(train) == "Exited")],
+                          y = train$Exited)
+    names(train_bal)[ncol(train_bal)] <- "Exited"
+  } else if (method == "undersample") {
+    train_bal <- downSample(x = train[, -which(names(train) == "Exited")],
+                            y = train$Exited)
+    names(train_bal)[ncol(train_bal)] <- "Exited"
+  } else if (method == "ROSE") {
+    train_mod <- train
+    char_cols <- sapply(train_mod, is.character)
+    train_mod[, char_cols] <- lapply(train_mod[, char_cols], factor)
+    train_bal <- ROSE::ROSE(Exited ~ ., data = train_mod, seed = 123)$data
+  }
+  
+
+  modelo_svm <- svm(Exited ~ ., data = train_bal, kernel = "linear",
+                    cost =  modelo_svm_linear$cost, gamma = modelo_svm_linear$gamma, probability = TRUE, scale = TRUE)
+  
+
+  prob_test <- predict(modelo_svm, newdata = test, probability = TRUE)
+  prob_test <- attr(prob_test, "probabilities")[, "1"]
+  
+  for (c in cutoffs) {
+    pred_corte_test <- factor(ifelse(prob_test > c, "1", "0"), levels = levels(test$Exited))
+    
+    t2 <- table(pred_corte_test, test$Exited)
+    
+    TP <- t2[2,2]
+    FN <- t2[1,2]
+    FP <- t2[2,1]
+    TN<- t2[1,1]
+    accuracy<-TN+TP/(TN+TP+FP+FN)
+    recall <- TP / (TP + FN)
+    precision <- TP / (TP + FP)
+    f1 <- 2 * (precision * recall) / (precision + recall)
+    
+    results <- rbind(results,
+                     data.frame(balance_method = method,
+                                accuracy=accuracy,
+                                cutoff = c,
+                                recall = recall,
+                                f1 = f1))
+  }
 }
+
+print(results)
+```
+
+### Kernel linear con SMOTE
+```{r}
+set.seed(1234)
+train$Exited <- as.factor(train$Exited)
+train$Exited <- factor(train$Exited, levels = c("0", "1"), labels = c("No", "Yes"))
+
+
+ctrl_SMOTE <- trainControl(
+  method = "repeatedcv",   
+  number = 5,              
+  repeats = 2,            
+  sampling = "smote",      
+  classProbs = TRUE,      
+  summaryFunction = twoClassSummary)
+
+
+svm_grid <- expand.grid(C = c(0.001, 0.01, 0.1, 1, 5, 10, 20))
+
+modelo_svm <- train(
+  Exited ~ ., 
+  data = train,
+  method = "svmLinear",
+  metric = "ROC",         
+  trControl = ctrl_SMOTE,
+  tuneGrid = svm_grid,
+  preProcess = c("center", "scale"))
+
+modelo_svm$bestTune
+print(modelo_svm)
+results <- data.frame(cutoff=numeric(),
+                      recall=numeric(),
+                      f1=numeric())
+
+cutoffs <- seq(0.01, 0.99, by = 0.01)
+
+
+
+test$Exited <- factor(test$Exited, levels = c("0","1"), labels = c("No","Yes"))
+
+prob_test <- predict(modelo_svm, newdata = test, type = "prob")
+prob_test <- prob_test$Yes   
+summary(prob_test)
+
+for (c in cutoffs) {
+  pred_corte_test <- factor(ifelse(prob_test > c, "Yes", "No"), levels = levels(test$Exited))
+  
+  t2 <- table(pred_corte_test, test$Exited)
+  
+    TP <- t2[2,2]
+    FN <- t2[1,2]
+    FP <- t2[2,1]
+  
+  recall <-TP / (TP + FN)
+  precision <-  TP / (TP + FP)
+  accuracy<- TP+TN/(TP+TN+FN+FP)
+  f1 <-  2 * (precision * recall) / (precision + recall)
+  
+  results <- rbind(results,
+                   data.frame(cutoff = c,
+                              accuracy= accuracy,
+                              recall = recall,
+                              f1 = f1))
+}
+
 print(results)
 ```
 
@@ -182,54 +391,166 @@ print(results)
 ```{r}
 set.seed(1234)
 
-#svm_cv_linear <- tune("svm", Dictamen ~ ., data = dataTrain, kernel = 'polynomial',
-   #       ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 20)),scale=TRUE)
+svm_cv_poly <- tune( "svm", Exited ~ ., data = train, kernel = "polynomial", ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 20),gamma = c(0.1),degree = c(2, 3, 4), coef0 = c(0,1)),scale = TRUE)
 
-svm_cv_poly <- tune( "svm", Exited ~ ., data = train, kernel = "polynomial", ranges = list(cost = c(0.1, 1, 10),gamma = c(0.1),degree = c(2, 3), coef0 = c(0)),scale = TRUE)
-
-
-ggplot(data = svm_cv_poly$performances, aes(x = cost, y = error)) +
+ggplot(data = svm_cv_poly$performances, aes(x = cost, y = error, color = as.factor(gamma)))+
   geom_line() +
   geom_point() +
-  labs(title = "Error de clasificación vs C (kernel lineal)") +
+  labs(title = "Error de clasificación vs hiperparámetros C y gamma", color = "gamma") +
   theme_bw() +
   theme(legend.position = "bottom")
-
 svm_cv_poly$best.parameters
-modelo_svm_poly  <- svm_cv_poly$best.model
-modelo_svm_poly 
-
-best <- svm_cv_poly$best.parameters
-
-modelo_svm_poly <- svm(Exited ~ .,data = train,kernel = "polynomial",cost = best$cost,gamma = best$gamma,degree = best$degree,coef0 = best$coef0,  probability = TRUE, scale = TRUE)
-
-
-prob_test <- predict(modelo_svm_poly, newdata = test, probability = TRUE)
-prob_test <- attr(prob_test, "probabilities")[, "1"]
-
-cutoffs <- seq(0.1, 0.9, by = 0.005)
-results <- data.frame(cutoff = numeric(), accuracy=numeric(), recall = numeric(), f1 = numeric())
-for (c in cutoffs) {
-  pred_corte_test <- factor(ifelse(prob_test > c, "1", "0"), levels = levels(test$Exited))
-  
-t2<-table(pred_corte_test, test$Exited)
+modelo_svm_poly <- svm_cv_poly$best.model
+modelo_svm_poly
+svm.pred <- predict(modelo_svm_poly, test[,-21])
+t2<-table(svm.pred, test$Exited)
 t2
 TP <- t2[2,2]
-TN <- t2[1,1]
-FP <- t2[2,1]
 FN <- t2[1,2]
-
+FP <- t2[2,1]
+    
 recall <- TP / (TP + FN)
 precision <- TP / (TP + FP)
 f1 <- 2 * (precision * recall) / (precision + recall)
+    
 n<-nrow(test)
 accuracy2<-(sum(diag(t2))/n)
 accuracy2
+accuracy
 
-results <- rbind(results, data.frame(cutoff = c, accuracy=accuracy2, recall = recall, f1 = f1))
+balance_methods <- c("none", "oversample", "undersample", "ROSE")
+results <- data.frame(balance_method=character(),
+                      cutoff=numeric(),
+                      accuracy=numeric(),
+                      recall=numeric(),
+                      f1=numeric(),
+                      stringsAsFactors = FALSE)
+
+
+cutoffs <- seq(0.1, 0.9, by = 0.005)
+for (method in balance_methods) {
+  
+  if (method == "none") {
+    train_bal <- train
+  } else if (method == "oversample") {
+    train_bal <- upSample(x = train[, -which(names(train) == "Exited")],
+                          y = train$Exited)
+    names(train_bal)[ncol(train_bal)] <- "Exited"
+  } else if (method == "undersample") {
+    train_bal <- downSample(x = train[, -which(names(train) == "Exited")],
+                            y = train$Exited)
+    names(train_bal)[ncol(train_bal)] <- "Exited"
+  } else if (method == "ROSE") {
+    train_mod <- train
+    char_cols <- sapply(train_mod, is.character)
+    train_mod[, char_cols] <- lapply(train_mod[, char_cols], factor)
+    train_bal <- ROSE::ROSE(Exited ~ ., data = train_mod, seed = 123)$data
+  }
+  
+
+best <- svm_cv_poly$best.parameters
+modelo_svm <- svm(Exited ~ .,data = train,kernel = "polynomial",cost = best$cost,gamma = best$gamma,degree = best$degree,coef0 = best$coef0,  probability = TRUE, scale = TRUE)
+  
+
+  prob_test <- predict(modelo_svm, newdata = test, probability = TRUE)
+  prob_test <- attr(prob_test, "probabilities")[, "1"]
+  
+  for (c in cutoffs) {
+    pred_corte_test <- factor(ifelse(prob_test > c, "1", "0"), levels = levels(test$Exited))
+    
+    t2 <- table(pred_corte_test, test$Exited)
+    
+    TP <- t2[2,2]
+    FN <- t2[1,2]
+    FP <- t2[2,1]
+    TN <- t2[1,1]
+    
+    accuracy<-(TN+TP)/(TN+TP+FP+FN)
+    recall <- TP / (TP + FN)
+    precision <- TP / (TP + FP)
+    f1 <- 2 * (precision * recall) / (precision + recall)
+    
+    results <- rbind(results,
+                     data.frame(balance_method = method,
+                                accuracy=accuracy,
+                                cutoff = c,
+                                recall = recall,
+                                f1 = f1))
+  }
 }
+
 print(results)
 ```
+
+### Kernel polynomial con SMOTE
+```{r}
+set.seed(1234)
+train$Exited <- as.factor(train$Exited)
+train$Exited <- factor(train$Exited, levels = c("0", "1"), labels = c("No", "Yes"))
+
+
+ctrl_SMOTE <- trainControl(
+  method = "repeatedcv",   
+  number = 5,              
+  repeats = 2,            
+  sampling = "smote",      
+  classProbs = TRUE,      
+  summaryFunction = twoClassSummary)
+
+svm_grid <- expand.grid(degree = c(2,3,4),scale  = c(0.01, 0.1, 1),  C = c(0.001,0.01,0.1,1,5,10,20))
+
+modelo_svm <- train(
+  Exited ~ ., 
+  data = train,
+  method = "svmPoly",
+  metric = "ROC",         
+  trControl = ctrl_SMOTE,
+  tuneGrid = svm_grid,
+  preProcess = c("center", "scale"))
+
+modelo_svm$bestTune
+print(modelo_svm)
+results <- data.frame(cutoff=numeric(),
+                      recall=numeric(),
+                      f1=numeric())
+
+cutoffs <- seq(0.01, 0.99, by = 0.01)
+
+
+
+test$Exited <- factor(test$Exited, levels = c("0","1"), labels = c("No","Yes"))
+
+prob_test <- predict(modelo_svm, newdata = test, type = "prob")
+prob_test <- prob_test$Yes   
+summary(prob_test)
+
+for (c in cutoffs) {
+  pred_corte_test <- factor(ifelse(prob_test > c, "Yes", "No"), levels = levels(test$Exited))
+  
+  t2 <- table(pred_corte_test, test$Exited)
+  
+    TP <- t2[2,2]
+    FN <- t2[1,2]
+    FP <- t2[2,1]
+  
+  recall <-TP / (TP + FN)
+  precision <-  TP / (TP + FP)
+  accuracy<- TP+TN/(TP+TN+FN+FP)
+  f1 <-  2 * (precision * recall) / (precision + recall)
+  
+  results <- rbind(results,
+                   data.frame(cutoff = c,
+                              accuracy= accuracy,
+                              recall = recall,
+                              f1 = f1))
+}
+
+print(results)
+```
+
+
+
+
 
 ## Kernel sigmoid
 ```{r}
