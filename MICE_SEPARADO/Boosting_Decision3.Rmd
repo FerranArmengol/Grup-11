@@ -25,8 +25,7 @@ mydata <- read.csv("datos_relevantes_Train_Decision3.csv")
 
 
 mydata <- mydata %>% select(-ID )%>%
-  mutate(across(where(is.character), as.factor)) %>%
-  mutate(across(where(~ is.numeric(.) && n_distinct(.) < 20), as.factor))
+  mutate(across(where(is.character), as.factor)) 
 
 mydata$Exited <- factor(mydata$Exited)
 
@@ -458,11 +457,11 @@ plot.roc(
 
 ```{r}
 probs_train <- predict(modelo_smote3, newdata = train, type = "prob")[, "1"]
-pred_train <- factor(ifelse(probs_train > 0.345, "1", "0"), levels = levels(train$Exited))
+pred_train <- factor(ifelse(probs_train > 0.320, "1", "0"), levels = levels(train$Exited))
 cm_train<- confusionMatrix(pred_train, train$Exited, positive = "1")
 cm_train
 probs_test <- predict(modelo_smote3, newdata = test, type = "prob")[, "1"]
-pred_test <- factor(ifelse(probs_test > 0.345, "1", "0"), levels = levels(test$Exited))
+pred_test <- factor(ifelse(probs_test > 0.320, "1", "0"), levels = levels(test$Exited))
 cm_test <- confusionMatrix(pred_test, test$Exited, positive = "1")
 cm_test
 
@@ -480,11 +479,11 @@ Además, las métricas de discriminación (AUC) son prácticamente idénticas en
 ```{r}
 tabla_overfitting <- data.frame(
   Dataset = c("Train", "Test"),
-  Accuracy = c(0.7928, 0.7967),
-  Kappa = c(0.4083, 0.4202),
-  Recall = c(0.5886, 0.6173),
-  Specificity = c(0.8463, 0.8417),
-  Precision = c(0.5005, 0.4949)
+  Accuracy = c(0.7851, 0.7923),
+  Kappa = c(0.4012, 0.4199),
+  Recall = c(0.6061, 0.6372),
+  Specificity = c(0.8320, 0.8313),
+  Precision = c(0.4855, 0.4869)
 )
 
 
@@ -539,7 +538,7 @@ for (col in setdiff(names(datos_test), factor_cols)) {
 
 # Predicción con XGB
 probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"1"]
-pred_submission <- ifelse(probs_submission > 0.345,"Yes", "No")
+pred_submission <- ifelse(probs_submission > 0.320,"Yes", "No")
 
 # Crear submission
 submission <- data.frame(
@@ -549,5 +548,5 @@ submission <- data.frame(
 
 submission
 
-write.csv(submission, "Boosting_XGB_SMOTE_0.345_Decision3.csv", row.names = FALSE)
+write.csv(submission, "Boosting_XGB_SMOTE_0.320_Decision3.csv", row.names = FALSE)
 ```
