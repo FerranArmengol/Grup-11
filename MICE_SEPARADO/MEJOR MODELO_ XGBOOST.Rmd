@@ -38,32 +38,7 @@ factor_cols <- names(train)[sapply(train, is.factor)]
 test <- mydata[-ind, ]
 ```
 
-```{r}
-# F1 score
 
-F1 <- function(cm) {
-p <- cm$byClass["Precision"]
-r <- cm$byClass["Recall"]
-2*p*r/(p+r)
-}
-
-# Ajustar punto de corte
-
-threshold_eval <- function(probs, true){
-cortes <- seq(0.1, 0.9, 0.01)
-f1s <- recalls <- numeric(length(cortes))
-
-for(i in 1:length(cortes)){
-pred <- ifelse(probs > cortes[i], "1","0")
-cm <- confusionMatrix(factor(pred, levels=levels(true)), true, positive="1")
-f1s[i] <- F1(cm)
-recalls[i] <- cm$byClass["Recall"]
-}
-
-data.frame(threshold=cortes, F1=f1s, Recall=recalls)
-}
-
-```
 
 # XGBoost (SMOTE)
 
@@ -226,8 +201,8 @@ for (col in setdiff(names(datos_test), factor_cols)) {
 }
 
 # Predicción con XGB
-probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"Yes"]
-pred_submission <- ifelse(probs_submission > 0.335,"Yes", "No")
+probs_submission <- predict(modelo_smote3, newdata = datos_test, type = "prob")[,"1"]
+pred_submission <- ifelse(probs_submission > 0.345,"Yes", "No")
 
 # Crear submission
 submission <- data.frame(
@@ -237,5 +212,5 @@ submission <- data.frame(
 
 submission
 
-#write.csv(submission, "Boosting_XGB_SMOTE_0.335_Decision3.csv", row.names = FALSE)
+#write.csv(submission, "Boosting_XGB_SMOTE_0.345_Decision3.csv", row.names = FALSE)
 ```
