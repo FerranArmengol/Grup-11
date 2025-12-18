@@ -280,6 +280,7 @@ write.csv(datos_decision_2,file = "datos_decision_2_sin_mahalanobis.csv",row.nam
 
 cat("DECISIÓN 2:",nrow(datos_decision_2),"observaciones tras eliminar Mahalanobis\n")
 ```
+Probando en todos los modelos obteniamos resultados muy bajos, seguramente al eliminar demasiados datos.
 
 ### Decisión 3: Eliminar oultiers Mahalanobis + LOF
 ```{r}
