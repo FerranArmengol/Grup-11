@@ -25,8 +25,7 @@ mydata <- read.csv("datos_relevantes_Train_Decision3.csv")
 
 
 mydata <- mydata %>% select(-ID )%>%
-  mutate(across(where(is.character), as.factor)) %>%
-  mutate(across(where(~ is.numeric(.) && n_distinct(.) < 20), as.factor))
+  mutate(across(where(is.character), as.factor)) 
 
 mydata$Exited <- factor(mydata$Exited)
 
@@ -180,7 +179,7 @@ datos_test <- read.csv("datos_relevantes_Test.csv")
 
 id_test <- datos_test$ID
 
-# --- MUY IMPORTANTE ---
+# IMPORTANTE 
 # 1. Convertir las columnas factor al mismo tipo
 for (col in factor_cols) {
   if (col %in% names(datos_test)) {
@@ -428,7 +427,7 @@ datos_test <- read.csv("datos_relevantes_Test.csv")
 id_test <- datos_test$ID
 
 
-# --- MUY IMPORTANTE ---
+# IMPORTANTE
 # Aplicar EXACTAMENTE el mismo preprocesado que train
 # 1. Convertir las columnas factor al mismo tipo
 for (col in factor_cols) {
@@ -527,7 +526,7 @@ rules_conf <- sort(rules_bank, by = "confidence", decreasing = TRUE)
 inspect(head(rules_conf, 10))
 
 # FILTRAR REGLAS ESPECÍFICAS 
-# Ejemplo: clientes que abandonaron el banco (Exited=1)
+## clientes que abandonaron el banco (Exited=1)
 rules_exited <- subset(rules_bank, subset = rhs %in% "Exited=1")
 inspect(sort(rules_exited, by = "lift"))
 ```
@@ -540,10 +539,8 @@ aplicar_reglas_churn <- function(pred_df, reglas, target_col_model="Exited_model
 
   df_rules <- df
 
-  # Predicción final inicial = modelo
   df$Exited_final <- df$Exited_model
 
-  # CAMBIO CLAVE AQUÍ 
   lhs_list <- LIST(lhs(reglas))  
 
   for (i in seq_along(lhs_list)) {
@@ -565,7 +562,6 @@ aplicar_reglas_churn <- function(pred_df, reglas, target_col_model="Exited_model
       }
     }
 
-    # Si la regla se cumple → forzar churn
     df$Exited_final[mask] <- "1"
   }
 
@@ -628,10 +624,8 @@ cambios <- pred_df_rules %>%
   mutate(cambio = ifelse(Exited == "0" & Exited_final == "1", TRUE, FALSE)) %>%
   filter(cambio == TRUE)
 
-# Ver IDs de los cambios
 cambios$ID
 
-# Ver todo el detalle de las observaciones cambiadas
 cambios
 
 submissionAR <- submissionAR %>%
